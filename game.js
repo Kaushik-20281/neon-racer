@@ -143,27 +143,27 @@ function addCapsuleCollider(start, end, radius, minY = Math.min(start.y, end.y),
   });
 }
 
-function isPositionBlocked(x, z, y) {
+function isPositionBlocked(x, z, y, radius = carCollisionRadius) {
   if (
     !environmentBounds
-    || x < environmentBounds.minX + carCollisionRadius
-    || x > environmentBounds.maxX - carCollisionRadius
-    || z < environmentBounds.minZ + carCollisionRadius
-    || z > environmentBounds.maxZ - carCollisionRadius
+    || x < environmentBounds.minX + radius
+    || x > environmentBounds.maxX - radius
+    || z < environmentBounds.minZ + radius
+    || z > environmentBounds.maxZ - radius
   ) return true;
 
   for (const collider of environmentColliders) {
     if (y + 1.4 < collider.minY || y > collider.maxY) continue;
     if (collider.type === "circle") {
-      if (Math.hypot(x - collider.x, z - collider.z) < collider.radius + carCollisionRadius) return true;
+      if (Math.hypot(x - collider.x, z - collider.z) < collider.radius + radius) return true;
     } else if (collider.type === "box") {
       const offsetX = x - collider.x;
       const offsetZ = z - collider.z;
       const localX = offsetX * Math.cos(collider.yaw) - offsetZ * Math.sin(collider.yaw);
       const localZ = offsetX * Math.sin(collider.yaw) + offsetZ * Math.cos(collider.yaw);
       if (
-        Math.abs(localX) < collider.halfWidth + carCollisionRadius
-        && Math.abs(localZ) < collider.halfDepth + carCollisionRadius
+        Math.abs(localX) < collider.halfWidth + radius
+        && Math.abs(localZ) < collider.halfDepth + radius
       ) return true;
     } else {
       const segmentX = collider.endX - collider.startX;
@@ -178,7 +178,7 @@ function isPositionBlocked(x, z, y) {
         );
       const closestX = collider.startX + segmentX * projection;
       const closestZ = collider.startZ + segmentZ * projection;
-      if (Math.hypot(x - closestX, z - closestZ) < collider.radius + carCollisionRadius) return true;
+      if (Math.hypot(x - closestX, z - closestZ) < collider.radius + radius) return true;
     }
   }
   return false;
@@ -192,25 +192,46 @@ function isInsideEnvironmentBounds(point, radius = 0) {
     && point.z <= environmentBounds.maxZ - radius;
 }
 
-function moveCarWithCollisions(deltaX, deltaZ, getHeight) {
+function isPathBlocked(start, end, getHeight, radius = carCollisionRadius) {
+  const distance = Math.hypot(end.x - start.x, end.z - start.z);
+  const steps = Math.max(1, Math.ceil(distance / 0.55));
+  for (let i = 1; i <= steps; i += 1) {
+    const fraction = i / steps;
+    const x = THREE.MathUtils.lerp(start.x, end.x, fraction);
+    const z = THREE.MathUtils.lerp(start.z, end.z, fraction);
+    const y = getHeight(x, z, fraction);
+    if (isPositionBlocked(x, z, y, radius)) return true;
+  }
+  return false;
+}
+
+function isCityPathBlocked(start, end, radius = carCollisionRadius) {
+  return isPathBlocked(start, end, (x, z, fraction) => {
+    const referenceY = THREE.MathUtils.lerp(start.y, end.y, fraction);
+    const roadPosition = getCityRoadPosition(x, z, referenceY);
+    return roadPosition.distance <= trackWidth + 2 ? roadPosition.point.y : 0;
+  }, radius);
+}
+
+function moveCarWithCollisions(movingCar, deltaX, deltaZ, getHeight, radius = carCollisionRadius) {
   const steps = Math.max(1, Math.ceil(Math.hypot(deltaX, deltaZ) / 0.55));
   const stepX = deltaX / steps;
   const stepZ = deltaZ / steps;
   let collided = false;
   for (let i = 0; i < steps; i += 1) {
-    const nextX = car.position.x + stepX;
-    const nextZ = car.position.z + stepZ;
-    if (!isPositionBlocked(nextX, nextZ, getHeight(nextX, nextZ))) {
-      car.position.x = nextX;
-      car.position.z = nextZ;
+    const nextX = movingCar.position.x + stepX;
+    const nextZ = movingCar.position.z + stepZ;
+    if (!isPositionBlocked(nextX, nextZ, getHeight(nextX, nextZ), radius)) {
+      movingCar.position.x = nextX;
+      movingCar.position.z = nextZ;
       continue;
     }
     collided = true;
-    if (!isPositionBlocked(nextX, car.position.z, getHeight(nextX, car.position.z))) {
-      car.position.x = nextX;
+    if (!isPositionBlocked(nextX, movingCar.position.z, getHeight(nextX, movingCar.position.z), radius)) {
+      movingCar.position.x = nextX;
     }
-    if (!isPositionBlocked(car.position.x, nextZ, getHeight(car.position.x, nextZ))) {
-      car.position.z = nextZ;
+    if (!isPositionBlocked(movingCar.position.x, nextZ, getHeight(movingCar.position.x, nextZ), radius)) {
+      movingCar.position.z = nextZ;
     }
   }
   return collided;
@@ -328,6 +349,7 @@ function disposeEnvironment() {
   checkpointGate = null;
   environmentColliders = [];
   environmentBounds = null;
+  mountainTerrainHeights = null;
   scene.background = new THREE.Color(0x8fb9d5);
   scene.fog = null;
 }
@@ -911,6 +933,9 @@ const hillLength = hillCurve.getLength();
 const hillRoadWidth = 17;
 const hillTerrainSamples = Array.from({ length: 321 }, (_, index) => hillCurve.getPointAt(index / 320));
 const mountainBounds = { minX: -220, maxX: 220, minZ: -620, maxZ: 90 };
+const mountainTerrainColumns = 88;
+const mountainTerrainRows = 142;
+let mountainTerrainHeights = null;
 
 function hillRoadPoint(progress, lateralOffset = 0, elevationOffset = 0) {
   const t = THREE.MathUtils.clamp(progress / hillLength, 0, 1);
@@ -931,6 +956,32 @@ function hillRoadPointExtended(progress, lateralOffset = 0, elevationOffset = 0)
 }
 
 function getMountainTerrainHeight(x, z) {
+  if (!mountainTerrainHeights) return getMountainTerrainBaseHeight(x, z);
+  const columnPosition = THREE.MathUtils.clamp(
+    ((x - mountainBounds.minX) / (mountainBounds.maxX - mountainBounds.minX)) * mountainTerrainColumns,
+    0,
+    mountainTerrainColumns,
+  );
+  const rowPosition = THREE.MathUtils.clamp(
+    ((z - mountainBounds.minZ) / (mountainBounds.maxZ - mountainBounds.minZ)) * mountainTerrainRows,
+    0,
+    mountainTerrainRows,
+  );
+  const column = Math.min(Math.floor(columnPosition), mountainTerrainColumns - 1);
+  const row = Math.min(Math.floor(rowPosition), mountainTerrainRows - 1);
+  const u = columnPosition - column;
+  const v = rowPosition - row;
+  const index = row * (mountainTerrainColumns + 1) + column;
+  const topLeft = mountainTerrainHeights[index];
+  const topRight = mountainTerrainHeights[index + 1];
+  const bottomLeft = mountainTerrainHeights[index + mountainTerrainColumns + 1];
+  const bottomRight = mountainTerrainHeights[index + mountainTerrainColumns + 2];
+  return u + v <= 1
+    ? topLeft * (1 - u - v) + topRight * u + bottomLeft * v
+    : topRight * (1 - v) + bottomLeft * (1 - u) + bottomRight * (u + v - 1);
+}
+
+function getMountainTerrainBaseHeight(x, z) {
   let nearestDistanceSquared = Infinity;
   let nearestIndex = 0;
   for (let i = 0; i < hillTerrainSamples.length; i += 1) {
@@ -982,15 +1033,18 @@ function isMountainPlacementClear(point, radius) {
 }
 
 function buildMountainTerrain() {
-  const columns = 44;
-  const rows = 71;
+  const columns = mountainTerrainColumns;
+  const rows = mountainTerrainRows;
   const positions = [];
   const indices = [];
+  mountainTerrainHeights = [];
   for (let row = 0; row <= rows; row += 1) {
     const z = mountainBounds.minZ + ((mountainBounds.maxZ - mountainBounds.minZ) * row) / rows;
     for (let column = 0; column <= columns; column += 1) {
       const x = mountainBounds.minX + ((mountainBounds.maxX - mountainBounds.minX) * column) / columns;
-      positions.push(x, getMountainTerrainHeight(x, z), z);
+      const height = getMountainTerrainBaseHeight(x, z);
+      positions.push(x, height, z);
+      mountainTerrainHeights.push(height);
       if (row < rows && column < columns) {
         const index = row * (columns + 1) + column;
         indices.push(index, index + columns + 1, index + 1);
@@ -1155,8 +1209,12 @@ function buildHillClimb() {
   environmentWorld.add(pineTrunks, ...pineCrowns);
 
   const rockColors = activeTheme.rockColors || [0x77776f, 0x969187];
+  const rockGeometry = new THREE.DodecahedronGeometry(1, 1);
+  rockGeometry.computeBoundingBox();
+  const rockBottomOffset = -rockGeometry.boundingBox.min.y;
+  const rockHeightOffset = rockGeometry.boundingBox.max.y - rockGeometry.boundingBox.min.y;
   const rockInstances = rockColors.map((color) => new THREE.InstancedMesh(
-    new THREE.DodecahedronGeometry(1, 1),
+    rockGeometry,
     new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true }),
     100,
   ));
@@ -1167,10 +1225,11 @@ function buildHillClimb() {
     const point = getMountainGroundPoint(fraction * hillLength, side * (62 + random() * 110));
     const size = 7 + random() * 12;
     if (!isMountainPlacementClear(point, size * 2)) continue;
-    addCircleCollider(point, size * 1.9, point.y, point.y + size * 1.5);
-    transform.position.set(point.x, point.y + size * 0.55, point.z);
-    transform.rotation.set(random() * 0.5, random() * Math.PI, random() * 0.35);
-    transform.scale.set(size * (1.1 + random() * 0.8), size * (0.7 + random() * 0.5), size * (1 + random() * 0.7));
+    const rockHeight = size * (0.7 + random() * 0.5);
+    addCircleCollider(point, size * 1.9, point.y, point.y + rockHeight * rockHeightOffset);
+    transform.position.set(point.x, point.y + rockHeight * rockBottomOffset, point.z);
+    transform.rotation.set(0, random() * Math.PI, 0);
+    transform.scale.set(size * (1.1 + random() * 0.8), rockHeight, size * (1 + random() * 0.7));
     transform.updateMatrix();
     const materialIndex = i % rockInstances.length;
     rockInstances[materialIndex].setMatrixAt(rockCounts[materialIndex], transform.matrix);
@@ -1667,7 +1726,7 @@ function setGameMode(mode) {
   trackStatus.textContent = climbing ? "SUMMIT RUN" : checkpointRush ? "TIME ATTACK" : ghostRide ? "PERSONAL BEST" : "TRACK 01";
   trackName.textContent = climbing ? "MOUNTAIN ASCENT" : checkpointRush ? "DESERT CHECKPOINTS" : ghostRide ? "DOWNTOWN GHOST LAP" : "DOWNTOWN CIRCUIT";
   trackCoordinate.textContent = climbing || checkpointRush ? `${Math.round(hillLength)} M CLIMB` : "35° 41' N — 139° 41' E";
-  timerLabel.textContent = climbing ? "CLIMB TIME" : checkpointRush ? "TIME LEFT" : "RACE TIME";
+  timerLabel.textContent = climbing ? "CLIMB TIME" : checkpointRush ? "TIME" : "RACE TIME";
   steerHint.textContent = climbing || checkpointRush ? "Move across the road as you climb" : "Guide your car around the circuit";
   startIntro.textContent = climbing
     ? "Climb a winding mountain road through pine forest and rocky cliffs to the summit viewpoint."
@@ -2269,9 +2328,16 @@ function updateOpponents(deltaTime) {
     const angle = startAngle + opponent.progress;
     const tangent = trackTangent(angle);
     const tangentLength = Math.hypot(tangent.x, tangent.z);
-    opponent.progress += (opponent.speed / tangentLength) * deltaTime;
+    const nextProgress = Math.min(
+      Math.PI * 6,
+      opponent.progress + (opponent.speed / tangentLength) * deltaTime,
+    );
+    const nextAngle = startAngle + nextProgress;
+    const nextPosition = makeOvalPoint(nextAngle, opponent.laneOffset);
+    if (isCityPathBlocked(opponent.car.position, nextPosition)) continue;
+
+    opponent.progress = nextProgress;
     if (opponent.progress >= Math.PI * 6) {
-      opponent.progress = Math.PI * 6;
       opponent.finished = true;
       opponent.finishTime = raceTime;
     }
@@ -2382,10 +2448,10 @@ function updateGhost(deltaTime) {
     const tangent = trackTangent(angle);
     const previousX = ghostCar.position.x;
     const previousZ = ghostCar.position.z;
+    if (!isCityPathBlocked(ghostCar.position, position)) ghostCar.position.copy(position);
     const slope = (
       trackElevation(angle + 0.005) - trackElevation(angle - 0.005)
     ) / (0.01 * Math.hypot(tangent.x, tangent.z));
-    ghostCar.position.copy(position);
     ghostCar.rotation.set(
       Math.atan(slope),
       Math.atan2(-tangent.x, -tangent.z),
@@ -2405,13 +2471,16 @@ function updateGhost(deltaTime) {
   const second = points[secondIndex];
   const previousX = ghostCar.position.x;
   const previousZ = ghostCar.position.z;
-  ghostCar.position.set(
+  const nextPosition = new THREE.Vector3(
     THREE.MathUtils.lerp(first.x, second.x, fraction),
     THREE.MathUtils.lerp(first.y, second.y, fraction),
     THREE.MathUtils.lerp(first.z, second.z, fraction),
   );
   const headingDelta = Math.atan2(Math.sin(second.heading - first.heading), Math.cos(second.heading - first.heading));
-  ghostCar.rotation.y = first.heading + headingDelta * fraction;
+  if (!isCityPathBlocked(ghostCar.position, nextPosition)) {
+    ghostCar.position.copy(nextPosition);
+    ghostCar.rotation.y = first.heading + headingDelta * fraction;
+  }
   if (ghostCar.visible) {
     const distance = Math.hypot(ghostCar.position.x - previousX, ghostCar.position.z - previousZ);
     animateCarWheels(ghostCar, distance);
@@ -2445,22 +2514,20 @@ function update(deltaTime) {
     }
     carState.speed = THREE.MathUtils.clamp(carState.speed, 0, maxSpeed);
     const nextLaneOffset = THREE.MathUtils.clamp(hillLaneOffset + steering * 7 * deltaTime, -5.3, 5.3);
-    if (racing) {
-      hillProgress = Math.min(hillLength, hillProgress + carState.speed * deltaTime);
-      if (gameMode === "hill") {
-        lastHillRecoveryProgress = Math.floor(hillProgress / checkpointSpacing) * checkpointSpacing;
-        const progressPercent = Math.floor((hillProgress / hillLength) * 100);
-        hillProgressDisplay.textContent = String(progressPercent);
-        hillProgressFill.style.width = `${progressPercent}%`;
-        if (hillProgress >= hillLength) finishRace();
-      }
-    }
-    const safeProgress = Math.min(hillProgress, hillLength - 0.001);
+    const nextProgress = racing
+      ? Math.min(hillLength, hillProgress + carState.speed * deltaTime)
+      : hillProgress;
+    const safeProgress = Math.min(nextProgress, hillLength - 0.001);
     const safePosition = hillRoadPoint(safeProgress, nextLaneOffset);
-    if (!isPositionBlocked(safePosition.x, safePosition.z, safePosition.y)) {
+    if (!isPathBlocked(
+      car.position,
+      safePosition,
+      (_x, _z, fraction) => THREE.MathUtils.lerp(car.position.y, safePosition.y, fraction),
+    )) {
+      hillProgress = nextProgress;
       hillLaneOffset = nextLaneOffset;
-    } else if (Math.abs(nextLaneOffset - hillLaneOffset) > 0.001) {
-      carState.speed = 0;
+    } else {
+      carState.speed *= 0.25;
     }
     const progress = Math.min(hillProgress, hillLength - 0.001);
     const tangent = hillCurve.getTangentAt(progress / hillLength);
@@ -2470,6 +2537,13 @@ function update(deltaTime) {
     carState.heading = Math.atan2(-tangent.x, -tangent.z);
     const steeringStrength = THREE.MathUtils.clamp(carState.speed / 9, 0, 1);
     car.rotation.set(slopeAngle, carState.heading, -steering * steeringStrength * 0.065);
+    if (gameMode === "hill") {
+      lastHillRecoveryProgress = Math.floor(hillProgress / checkpointSpacing) * checkpointSpacing;
+      const progressPercent = Math.floor((hillProgress / hillLength) * 100);
+      hillProgressDisplay.textContent = String(progressPercent);
+      hillProgressFill.style.width = `${progressPercent}%`;
+      if (hillProgress >= hillLength) finishRace();
+    }
   } else {
     if (racing && throttle) carState.speed += vehicle.acceleration * deltaTime;
     else if (racing && brake) carState.speed -= 37 * deltaTime;
@@ -2481,6 +2555,7 @@ function update(deltaTime) {
     carState.heading -= steering * steeringStrength * vehicle.handling * 1.8 * deltaTime * Math.sign(carState.speed || 1);
     forward.set(-Math.sin(carState.heading), 0, -Math.cos(carState.heading));
     const collided = moveCarWithCollisions(
+      car,
       forward.x * carState.speed * deltaTime,
       forward.z * carState.speed * deltaTime,
       (x, z) => {
@@ -2488,7 +2563,7 @@ function update(deltaTime) {
         return roadPosition.distance <= trackWidth + 2 ? roadPosition.point.y : 0;
       },
     );
-    if (collided) carState.speed = 0;
+    if (collided) carState.speed *= 0.25;
     car.rotation.y = carState.heading;
     car.rotation.z = -steering * steeringStrength * 0.065;
     const { angle: roadAngle, point: roadPoint, distance: roadDistance } = getCityRoadPosition(
