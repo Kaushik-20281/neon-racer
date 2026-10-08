@@ -74,6 +74,8 @@ scene.background = new THREE.Color(0x8fb9d5);
 let environmentRoot = null;
 let environmentWorld = null;
 let activeTheme = null;
+let environmentColliders = [];
+let environmentBounds = null;
 let warmWhiteMaterial;
 let sidewalkMaterial;
 let curbMaterial;
@@ -101,6 +103,109 @@ const bridgeHeight = 8;
 const bridgeRampHalfAngle = 0.56;
 const lapCheckpointCount = 8;
 const checkpointSpacing = 45;
+const carCollisionRadius = 2.6;
+
+function addCircleCollider(point, radius, minY = point.y, maxY = point.y + 10) {
+  environmentColliders.push({
+    type: "circle",
+    x: point.x,
+    z: point.z,
+    radius,
+    minY,
+    maxY,
+  });
+}
+
+function addBoxCollider(point, halfWidth, halfDepth, yaw = 0, minY = point.y, maxY = point.y + 10) {
+  environmentColliders.push({
+    type: "box",
+    x: point.x,
+    z: point.z,
+    halfWidth,
+    halfDepth,
+    yaw,
+    minY,
+    maxY,
+  });
+}
+
+function addCapsuleCollider(start, end, radius, minY = Math.min(start.y, end.y), maxY = Math.max(start.y, end.y) + 2) {
+  environmentColliders.push({
+    type: "capsule",
+    startX: start.x,
+    startZ: start.z,
+    endX: end.x,
+    endZ: end.z,
+    radius,
+    minY,
+    maxY,
+  });
+}
+
+function isPositionBlocked(x, z, y) {
+  if (
+    !environmentBounds
+    || x < environmentBounds.minX + carCollisionRadius
+    || x > environmentBounds.maxX - carCollisionRadius
+    || z < environmentBounds.minZ + carCollisionRadius
+    || z > environmentBounds.maxZ - carCollisionRadius
+  ) return true;
+
+  for (const collider of environmentColliders) {
+    if (y + 1.4 < collider.minY || y > collider.maxY) continue;
+    if (collider.type === "circle") {
+      if (Math.hypot(x - collider.x, z - collider.z) < collider.radius + carCollisionRadius) return true;
+    } else if (collider.type === "box") {
+      const offsetX = x - collider.x;
+      const offsetZ = z - collider.z;
+      const localX = offsetX * Math.cos(collider.yaw) - offsetZ * Math.sin(collider.yaw);
+      const localZ = offsetX * Math.sin(collider.yaw) + offsetZ * Math.cos(collider.yaw);
+      if (
+        Math.abs(localX) < collider.halfWidth + carCollisionRadius
+        && Math.abs(localZ) < collider.halfDepth + carCollisionRadius
+      ) return true;
+    } else {
+      const segmentX = collider.endX - collider.startX;
+      const segmentZ = collider.endZ - collider.startZ;
+      const segmentLengthSquared = segmentX * segmentX + segmentZ * segmentZ;
+      const projection = segmentLengthSquared === 0
+        ? 0
+        : THREE.MathUtils.clamp(
+          ((x - collider.startX) * segmentX + (z - collider.startZ) * segmentZ) / segmentLengthSquared,
+          0,
+          1,
+        );
+      const closestX = collider.startX + segmentX * projection;
+      const closestZ = collider.startZ + segmentZ * projection;
+      if (Math.hypot(x - closestX, z - closestZ) < collider.radius + carCollisionRadius) return true;
+    }
+  }
+  return false;
+}
+
+function moveCarWithCollisions(deltaX, deltaZ, getHeight) {
+  const steps = Math.max(1, Math.ceil(Math.hypot(deltaX, deltaZ) / 0.55));
+  const stepX = deltaX / steps;
+  const stepZ = deltaZ / steps;
+  let collided = false;
+  for (let i = 0; i < steps; i += 1) {
+    const nextX = car.position.x + stepX;
+    const nextZ = car.position.z + stepZ;
+    if (!isPositionBlocked(nextX, nextZ, getHeight(nextX, nextZ))) {
+      car.position.x = nextX;
+      car.position.z = nextZ;
+      continue;
+    }
+    collided = true;
+    if (!isPositionBlocked(nextX, car.position.z, getHeight(nextX, car.position.z))) {
+      car.position.x = nextX;
+    }
+    if (!isPositionBlocked(car.position.x, nextZ, getHeight(car.position.x, nextZ))) {
+      car.position.z = nextZ;
+    }
+  }
+  return collided;
+}
 
 const environmentThemes = {
   circuit: {
@@ -140,6 +245,10 @@ function createEnvironment(mode) {
   if (!theme) throw new Error(`No environment is configured for mode "${mode}".`);
 
   activeTheme = theme;
+  environmentColliders = [];
+  environmentBounds = mode === "hill" || mode === "checkpoint"
+    ? { minX: -220, maxX: 220, minZ: -620, maxZ: 90 }
+    : { minX: -180, maxX: 180, minZ: -150, maxZ: 150 };
   environmentRoot = new THREE.Group();
   environmentWorld = new THREE.Group();
   environmentRoot.add(environmentWorld);
@@ -208,6 +317,8 @@ function disposeEnvironment() {
   sidewalkMaterial = null;
   curbMaterial = null;
   checkpointGate = null;
+  environmentColliders = [];
+  environmentBounds = null;
   scene.background = new THREE.Color(0x8fb9d5);
   scene.fog = null;
 }
@@ -266,6 +377,16 @@ function findNearestTrackAngle(x, z, referenceY) {
     }
   }
   return bestAngle;
+}
+
+function getCityRoadPosition(x, z, referenceY) {
+  const angle = findNearestTrackAngle(x, z, referenceY);
+  const point = makeOvalPoint(angle);
+  return {
+    angle,
+    point,
+    distance: Math.hypot(x - point.x, z - point.z),
+  };
 }
 
 function makeOvalRibbon(innerOffset, outerOffset, y, material, target) {
@@ -445,6 +566,27 @@ function addCityScenery() {
     const point = makeOvalPoint(angle, side * offset, 0);
     const tangent = trackTangent(angle);
     const yaw = Math.atan2(-tangent.x, -tangent.z);
+    const roadClearance = trackWidth / 2 + carCollisionRadius;
+    let overlapsRoad = false;
+    for (let sample = 0; sample < trackSamples; sample += 1) {
+      const roadAngle = (sample / trackSamples) * Math.PI * 2;
+      const roadPoint = makeOvalPoint(roadAngle);
+      if (
+        roadPoint.y + 1.4 < point.y - 0.2
+        || roadPoint.y > point.y + height
+      ) continue;
+      const offsetX = roadPoint.x - point.x;
+      const offsetZ = roadPoint.z - point.z;
+      const localX = offsetX * Math.cos(yaw) - offsetZ * Math.sin(yaw);
+      const localZ = offsetX * Math.sin(yaw) + offsetZ * Math.cos(yaw);
+      const outsideX = Math.max(Math.abs(localX) - width / 2, 0);
+      const outsideZ = Math.max(Math.abs(localZ) - depth / 2, 0);
+      if (Math.hypot(outsideX, outsideZ) < roadClearance) {
+        overlapsRoad = true;
+        break;
+      }
+    }
+    if (overlapsRoad) return;
     const color = buildingColors[Math.floor(random() * buildingColors.length)];
     buildingTransform.position.set(point.x, point.y + height / 2 - 0.13, point.z);
     buildingTransform.rotation.set(0, yaw, 0);
@@ -452,6 +594,14 @@ function addCityScenery() {
     buildingTransform.updateMatrix();
     buildingInstances.setMatrixAt(buildingCount, buildingTransform.matrix);
     buildingInstances.setColorAt(buildingCount, new THREE.Color(color));
+    addBoxCollider(
+      point,
+      width / 2,
+      depth / 2,
+      yaw,
+      point.y - 0.2,
+      point.y + height,
+    );
     buildingCount += 1;
 
     for (const facade of [-1, 1]) {
@@ -525,6 +675,7 @@ function addCityScenery() {
 
   function addTree(angle, side, offset) {
     const point = makeOvalPoint(angle, side * offset, 0);
+    addCircleCollider(point, 3.3, point.y, point.y + 9);
     treeTransform.position.set(point.x, point.y + 2.35, point.z);
     treeTransform.rotation.set(0, 0, 0);
     treeTransform.scale.set(1, 1, 1);
@@ -561,6 +712,7 @@ function addCityScenery() {
     lamp.position.set(point.x, point.y, point.z);
     const tangent = trackTangent(angle);
     lamp.rotation.y = Math.atan2(-tangent.x, -tangent.z);
+    addCircleCollider(point, 0.75, point.y, point.y + 8);
     environmentWorld.add(lamp);
   }
 
@@ -587,13 +739,14 @@ function addCityScenery() {
       signal.add(bulb);
     }
     signal.position.set(point.x, point.y, point.z);
+    addCircleCollider(point, 0.7, point.y, point.y + 5.5);
     environmentWorld.add(signal);
   }
 
   for (let i = 0; i < 48; i += 1) {
     const angle = (i / 48) * Math.PI * 2;
     const side = i % 2 === 0 ? 1 : -1;
-    addTree(angle, side, 11 + (i % 3) * 1.25);
+    addTree(angle, side, 16 + (i % 3) * 1.25);
     if (i % 2 === 0) addStreetLamp(angle, -side, 11.5);
   }
   trunkInstances.count = treeCount;
@@ -619,8 +772,8 @@ function addCityScenery() {
   const bridgeSamples = 56;
   for (let i = 0; i <= bridgeSamples; i += 1) {
     const angle = -bridgeRampHalfAngle + (2 * bridgeRampHalfAngle * i) / bridgeSamples;
-    const left = makeOvalPoint(angle, -trackWidth / 2 - 1, -0.55);
-    const right = makeOvalPoint(angle, trackWidth / 2 + 1, -0.55);
+    const left = makeOvalPoint(angle, -trackWidth / 2 - 1, -0.015);
+    const right = makeOvalPoint(angle, trackWidth / 2 + 1, -0.015);
     bridgePositions.push(left.x, left.y, left.z, right.x, right.y, right.z);
     bridgeEdgePoints[0].push(makeOvalPoint(angle, -trackWidth / 2 - 1, 1.35));
     bridgeEdgePoints[1].push(makeOvalPoint(angle, trackWidth / 2 + 1, 1.35));
@@ -642,6 +795,15 @@ function addCityScenery() {
       new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), bridgeSamples, 0.22, 8, false),
       bridgeRailMaterial,
     ));
+    for (let i = 0; i < points.length - 1; i += 1) {
+      addCapsuleCollider(
+        points[i],
+        points[i + 1],
+        0.25,
+        Math.min(points[i].y, points[i + 1].y) - 0.5,
+        Math.max(points[i].y, points[i + 1].y) + 0.6,
+      );
+    }
   }
   const supportGeometry = new THREE.BoxGeometry(1.5, bridgeHeight - 0.3, 1.5);
   for (const x of [-10, 10]) {
@@ -649,6 +811,7 @@ function addCityScenery() {
     support.position.set(x, (bridgeHeight - 0.3) / 2, 0);
     support.castShadow = true;
     environmentWorld.add(support);
+    addBoxCollider(support.position, 0.75, 0.75, 0, 0, bridgeHeight);
   }
 }
 
@@ -731,6 +894,14 @@ function hillRoadPoint(progress, lateralOffset = 0, elevationOffset = 0) {
   return point;
 }
 
+function hillRoadPointExtended(progress, lateralOffset = 0, elevationOffset = 0) {
+  if (progress >= 0 && progress <= hillLength) return hillRoadPoint(progress, lateralOffset, elevationOffset);
+  const endpointProgress = progress < 0 ? 0 : hillLength;
+  const endpoint = hillRoadPoint(endpointProgress, lateralOffset, elevationOffset);
+  const tangent = hillCurve.getTangentAt(endpointProgress / hillLength);
+  return endpoint.addScaledVector(tangent, progress - endpointProgress);
+}
+
 function buildHillClimb() {
   const samples = 520;
   const positions = [];
@@ -738,9 +909,9 @@ function buildHillClimb() {
   const leftEdge = [];
   const rightEdge = [];
   for (let i = 0; i <= samples; i += 1) {
-    const progress = (i / samples) * hillLength;
-    const left = hillRoadPoint(progress, -hillRoadWidth / 2, 0.02);
-    const right = hillRoadPoint(progress, hillRoadWidth / 2, 0.02);
+    const progress = -20 + (i / samples) * (hillLength + 40);
+    const left = hillRoadPointExtended(progress, -hillRoadWidth / 2, 0.02);
+    const right = hillRoadPointExtended(progress, hillRoadWidth / 2, 0.02);
     positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
     leftEdge.push(left);
     rightEdge.push(right);
@@ -796,8 +967,8 @@ function buildHillClimb() {
   for (const side of [-1, 1]) {
     const railPoints = [];
     for (let i = 0; i <= 180; i += 1) {
-      const progress = (i / 180) * hillLength;
-      const point = hillRoadPoint(progress, side * (hillRoadWidth / 2 + 1.35), 1.1);
+      const progress = -20 + (i / 180) * (hillLength + 32);
+      const point = hillRoadPointExtended(progress, side * (hillRoadWidth / 2 + 1.35), 1.1);
       railPoints.push(point);
       if (i % 3 === 0) {
         transform.position.copy(point);
@@ -807,6 +978,15 @@ function buildHillClimb() {
         railPostInstances.setMatrixAt(railPostCount, transform.matrix);
         railPostCount += 1;
       }
+    }
+    for (let i = 0; i < railPoints.length - 1; i += 1) {
+      addCapsuleCollider(
+        railPoints[i],
+        railPoints[i + 1],
+        0.2,
+        Math.min(railPoints[i].y, railPoints[i + 1].y) - 0.7,
+        Math.max(railPoints[i].y, railPoints[i + 1].y) + 0.7,
+      );
     }
     environmentWorld.add(new THREE.Mesh(
       new THREE.TubeGeometry(new THREE.CatmullRomCurve3(railPoints), 180, 0.12, 6, false),
@@ -837,6 +1017,7 @@ function buildHillClimb() {
     const side = random() < 0.5 ? -1 : 1;
     const point = hillRoadPoint(fraction * hillLength, side * (20 + random() * 68), -1);
     const scale = 0.8 + random() * 1.15;
+    addCircleCollider(point, 3.1 * scale, point.y, point.y + 10 * scale);
     transform.position.set(point.x, point.y + 2 * scale, point.z);
     transform.rotation.set(0, random() * Math.PI * 2, 0);
     transform.scale.set(scale, scale, scale);
@@ -867,8 +1048,9 @@ function buildHillClimb() {
   for (let i = 0; i < 200; i += 1) {
     const fraction = random();
     const side = random() < 0.5 ? -1 : 1;
-    const point = hillRoadPoint(fraction * hillLength, side * (48 + random() * 120), -8);
-    const size = 7 + random() * 19;
+    const point = hillRoadPoint(fraction * hillLength, side * (62 + random() * 110), -8);
+    const size = 7 + random() * 12;
+    addCircleCollider(point, size * 1.8, point.y, point.y + size * 1.5);
     transform.position.set(point.x, point.y + size * 0.42, point.z);
     transform.rotation.set(random() * 0.5, random() * Math.PI, random() * 0.35);
     transform.scale.set(size * (1.1 + random() * 0.8), size * (0.7 + random() * 0.5), size * (1 + random() * 0.7));
@@ -953,6 +1135,22 @@ function buildHillClimb() {
   }
   lookout.position.set(summit.x, summit.y, summit.z);
   lookout.rotation.y = summitYaw;
+  const addLookoutCollider = (localX, localY, localZ, halfWidth, halfHeight, halfDepth) => {
+    const point = new THREE.Vector3(
+      summit.x + Math.cos(summitYaw) * localX + Math.sin(summitYaw) * localZ,
+      summit.y + localY,
+      summit.z - Math.sin(summitYaw) * localX + Math.cos(summitYaw) * localZ,
+    );
+    addBoxCollider(point, halfWidth, halfDepth, summitYaw, point.y - halfHeight, point.y + halfHeight);
+  };
+  for (const side of [-1, 1]) {
+    addLookoutCollider(side * 15.4, 0.9, -15, 0.11, 0.65, 11.5);
+  }
+  addLookoutCollider(0, 0.9, -27.4, 15.4, 0.65, 0.11);
+  for (const x of [-9, 9]) {
+    addLookoutCollider(x, 1, -9, 1.75, 0.11, 0.35);
+    addLookoutCollider(x, 0.62, -9, 1.5, 0.325, 0.125);
+  }
   environmentWorld.add(lookout);
 }
 
@@ -1291,6 +1489,8 @@ let hillLaneOffset = 0;
 let checkpointCount = 0;
 let checkpointTimer = 20;
 let checkpointTarget = checkpointSpacing;
+let lastCityCheckpointAngle = startAngle;
+let lastHillRecoveryProgress = 0;
 let activeGhostRecord = null;
 let ghostCar = null;
 let runPath = [];
@@ -1367,6 +1567,8 @@ function setGameMode(mode) {
   }
   hillProgress = 0;
   hillLaneOffset = 0;
+  lastCityCheckpointAngle = startAngle;
+  lastHillRecoveryProgress = 0;
   activeGhostRecord = null;
   checkpointCount = 0;
   checkpointTimer = 20;
@@ -1411,6 +1613,8 @@ function resetCar() {
   checkpointTimer = 20;
   checkpointTarget = checkpointSpacing;
   nextLapCheckpoint = 1;
+  lastCityCheckpointAngle = startAngle;
+  lastHillRecoveryProgress = 0;
   runPath = [];
   pathSampleRemaining = 0;
   setCarAtStart();
@@ -1456,11 +1660,55 @@ function resetCar() {
   keys.clear();
 }
 
+function recoverCarToLastCheckpoint() {
+  carState.speed = 0;
+  if (gameMode === "hill" || gameMode === "checkpoint") {
+    hillProgress = lastHillRecoveryProgress;
+    hillLaneOffset = 0;
+    const progress = Math.min(hillProgress, hillLength - 0.001);
+    const tangent = hillCurve.getTangentAt(progress / hillLength);
+    car.position.copy(hillRoadPoint(hillProgress));
+    carState.heading = Math.atan2(-tangent.x, -tangent.z);
+    car.rotation.set(
+      Math.asin(THREE.MathUtils.clamp(tangent.y, -1, 1)),
+      carState.heading,
+      0,
+    );
+  } else {
+    car.position.copy(makeOvalPoint(lastCityCheckpointAngle));
+    const tangent = trackTangent(lastCityCheckpointAngle);
+    carState.heading = Math.atan2(-tangent.x, -tangent.z);
+    const slope = (
+      trackElevation(lastCityCheckpointAngle + 0.005) - trackElevation(lastCityCheckpointAngle - 0.005)
+    ) / (0.01 * Math.hypot(tangent.x, tangent.z));
+    car.rotation.set(Math.atan(slope), carState.heading, 0);
+    const checkpointIndex = Math.round(
+      (((lastCityCheckpointAngle - startAngle) % (Math.PI * 2)) + Math.PI * 2)
+      / (Math.PI * 2 / lapCheckpointCount),
+    ) % lapCheckpointCount;
+    totalAngle = (Math.PI * 2 * checkpointIndex) / lapCheckpointCount;
+  }
+  camera.position.copy(car.position).add(new THREE.Vector3(
+    0,
+    8,
+    gameMode === "hill" || gameMode === "checkpoint" ? 12 : 19,
+  ));
+  camera.lookAt(car.position);
+  keys.clear();
+}
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     event.preventDefault();
     if (raceState === "paused") resumeRace();
     else if (startScreen.hidden && finishScreen.hidden) pauseRace();
+    return;
+  }
+  if (event.key.toLowerCase() === "r") {
+    if (["countdown", "go", "racing", "paused"].includes(raceState)) {
+      event.preventDefault();
+      recoverCarToLastCheckpoint();
+    }
     return;
   }
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(event.key)) {
@@ -1584,7 +1832,9 @@ function createGhostCar(vehicle) {
     if (part.material) {
       part.material = part.material.clone();
       part.material.transparent = true;
-      part.material.opacity = 0.32;
+      part.material.opacity = 0.58;
+      part.material.emissive.set(0x0e6b7a);
+      part.material.emissiveIntensity = 0.5;
       part.material.depthWrite = false;
     }
   });
@@ -1921,6 +2171,7 @@ function updateLap() {
   if (distance > 12 || Math.abs(car.position.y - checkpoint.y) > 3.5) return;
 
   if (nextLapCheckpoint === 0) return;
+  lastCityCheckpointAngle = angle;
   if (nextLapCheckpoint === lapCheckpointCount) {
     const lapTime = raceTime - lapStartedAt;
     bestLapTime = Math.min(bestLapTime, lapTime);
@@ -1943,11 +2194,13 @@ function updateCheckpointRush() {
   if (carState.speed <= 0 || hillProgress < checkpointTarget) return;
   while (hillProgress >= checkpointTarget) {
     checkpointCount += 1;
+    lastHillRecoveryProgress = checkpointTarget;
     checkpointTimer += 5;
     checkpointCountDisplay.textContent = String(checkpointCount);
     checkpointTimeDisplay.textContent = String(Math.ceil(checkpointTimer));
     if (checkpointTarget >= hillLength) {
       hillProgress = 0;
+      lastHillRecoveryProgress = 0;
       checkpointTarget = checkpointSpacing;
       break;
     }
@@ -2003,8 +2256,28 @@ async function saveRunRecord() {
   }
 }
 
-function updateGhost() {
-  if (!ghostCar || !activeGhostRecord || !activeGhostRecord.path || raceState !== "racing") return;
+function updateGhost(deltaTime) {
+  if (!ghostCar || raceState !== "racing") return;
+  if (!activeGhostRecord || !activeGhostRecord.path) {
+    if (gameMode !== "ghost") return;
+    const angle = findNearestTrackAngle(car.position.x, car.position.z, car.position.y) + 0.045;
+    const position = makeOvalPoint(angle, 3.2);
+    const tangent = trackTangent(angle);
+    const previousX = ghostCar.position.x;
+    const previousZ = ghostCar.position.z;
+    const slope = (
+      trackElevation(angle + 0.005) - trackElevation(angle - 0.005)
+    ) / (0.01 * Math.hypot(tangent.x, tangent.z));
+    ghostCar.position.copy(position);
+    ghostCar.rotation.set(
+      Math.atan(slope),
+      Math.atan2(-tangent.x, -tangent.z),
+      0,
+    );
+    ghostCar.visible = true;
+    animateCarWheels(ghostCar, Math.hypot(ghostCar.position.x - previousX, ghostCar.position.z - previousZ));
+    return;
+  }
   const points = activeGhostRecord.path;
   if (points.length < 2) return;
   const progress = THREE.MathUtils.clamp(raceTime / activeGhostRecord.bestTime, 0, 1) * (points.length - 1);
@@ -2054,15 +2327,23 @@ function update(deltaTime) {
       carState.speed = 0;
     }
     carState.speed = THREE.MathUtils.clamp(carState.speed, 0, maxSpeed);
-    hillLaneOffset = THREE.MathUtils.clamp(hillLaneOffset + steering * 7 * deltaTime, -5.3, 5.3);
+    const nextLaneOffset = THREE.MathUtils.clamp(hillLaneOffset + steering * 7 * deltaTime, -5.3, 5.3);
     if (racing) {
       hillProgress = Math.min(hillLength, hillProgress + carState.speed * deltaTime);
       if (gameMode === "hill") {
+        lastHillRecoveryProgress = Math.floor(hillProgress / checkpointSpacing) * checkpointSpacing;
         const progressPercent = Math.floor((hillProgress / hillLength) * 100);
         hillProgressDisplay.textContent = String(progressPercent);
         hillProgressFill.style.width = `${progressPercent}%`;
         if (hillProgress >= hillLength) finishRace();
       }
+    }
+    const safeProgress = Math.min(hillProgress, hillLength - 0.001);
+    const safePosition = hillRoadPoint(safeProgress, nextLaneOffset);
+    if (!isPositionBlocked(safePosition.x, safePosition.z, safePosition.y)) {
+      hillLaneOffset = nextLaneOffset;
+    } else if (Math.abs(nextLaneOffset - hillLaneOffset) > 0.001) {
+      carState.speed = 0;
     }
     const progress = Math.min(hillProgress, hillLength - 0.001);
     const tangent = hillCurve.getTangentAt(progress / hillLength);
@@ -2082,12 +2363,22 @@ function update(deltaTime) {
     const steeringStrength = THREE.MathUtils.clamp(Math.abs(carState.speed) / 9, 0, 1);
     carState.heading -= steering * steeringStrength * vehicle.handling * 1.8 * deltaTime * Math.sign(carState.speed || 1);
     forward.set(-Math.sin(carState.heading), 0, -Math.cos(carState.heading));
-    car.position.addScaledVector(forward, carState.speed * deltaTime);
+    const collided = moveCarWithCollisions(
+      forward.x * carState.speed * deltaTime,
+      forward.z * carState.speed * deltaTime,
+      (x, z) => {
+        const roadPosition = getCityRoadPosition(x, z, car.position.y);
+        return roadPosition.distance <= trackWidth + 2 ? roadPosition.point.y : 0;
+      },
+    );
+    if (collided) carState.speed = 0;
     car.rotation.y = carState.heading;
     car.rotation.z = -steering * steeringStrength * 0.065;
-    const roadAngle = findNearestTrackAngle(car.position.x, car.position.z, car.position.y);
-    const roadPoint = makeOvalPoint(roadAngle);
-    const roadDistance = Math.hypot(car.position.x - roadPoint.x, car.position.z - roadPoint.z);
+    const { angle: roadAngle, point: roadPoint, distance: roadDistance } = getCityRoadPosition(
+      car.position.x,
+      car.position.z,
+      car.position.y,
+    );
     if (roadDistance <= trackWidth + 2) {
       const tangent = trackTangent(roadAngle);
       const sampleAngle = 0.005;
@@ -2127,7 +2418,7 @@ function update(deltaTime) {
   if (gameMode === "circuit" && (raceState === "racing" || raceState === "finished")) updateOpponents(deltaTime);
   if (gameMode === "circuit") updatePosition();
   sampleRunPath(deltaTime);
-  updateGhost();
+  updateGhost(deltaTime);
 
   cameraTarget.copy(car.position);
   const mountainMode = gameMode === "hill" || gameMode === "checkpoint";
