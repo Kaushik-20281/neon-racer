@@ -1,44 +1,42 @@
 # Metro Drive
 
-Metro Drive is a browser-based 3D driving game with four modes and four selectable vehicles.
+Metro Drive is a browser-based 3D driving game with four modes, four selectable vehicles, and mode-specific environments.
 
 ## Game modes and environments
 
-- **Circuit Race** — complete three laps on a figure-eight city circuit. A raised flyover, ramps, and a lower road let the two routes cross at different heights. The daytime city has varied buildings, sidewalks, traffic lights, street lamps, trees, and a clear blue sky.
-- **Ghost Ride** — race the same figure-eight city circuit against a translucent replay of your personal best, or a paced ghost on your first run, under sunset skies and warm orange light.
-- **Hill Climb** — drive a winding mountain road through pine forest and rocky cliffs to a viewpoint, with guard rails, patches of fog, and soft morning light.
-- **Checkpoint Rush** — race the same mountain road in a bright desert palette. Reach the glowing checkpoints in sequence to add time to the clock.
-
-Each environment is created when its mode starts and released when you return to the main menu.
+- **Circuit Race** — race three laps on a figure-eight city circuit with an elevated flyover, ramps, buildings, sidewalks, traffic lights, street lamps, and trees in daytime.
+- **Hill Climb** — climb a winding mountain road through pine forest and rocky cliffs to a viewpoint, with guard rails and patches of fog.
+- **Ghost Ride** — race the same city circuit at sunset against a translucent replay of your personal best. A paced ghost is shown before a best run is available.
+- **Checkpoint Rush** — race the same mountain road in a bright desert palette and reach glowing checkpoints to add time.
 
 ## Vehicles
 
-- **Small Hatchback** — compact and nimble.
-- **Yellow Taxi** — steady city driving.
-- **Sports Coupe** — high top speed with lighter handling.
-- **Pickup Truck** — strong torque for steep climbs.
+Choose from the **Small Hatchback**, **Yellow Taxi**, **Sports Coupe**, and **Pickup Truck**. Each has different performance characteristics.
 
-Vehicle performance varies by mode.
+## Features
+
+- Personal-best leaderboards show records by mode and vehicle; Circuit Race and Ghost Ride also have lap-time records, while Checkpoint Rush tracks checkpoint scores.
+- Ghost car replays your saved best run in Ghost Ride.
+- Pause menu with resume, restart, and return-to-menu options.
 
 ## Controls
 
-- **Up Arrow / W** — accelerate
-- **Down Arrow / S** — brake or reverse (reverse is available on city tracks)
-- **Left Arrow / A** and **Right Arrow / D** — steer; on mountain routes, steer across the road
-- **R** — recover to the last checkpoint without restarting the race
+- **Up Arrow** — accelerate
+- **Down Arrow** — brake (and reverse on city tracks)
+- **Left / Right Arrow** — steer; on mountain routes, steer across the road
+- **R** — recover to the last checkpoint
 - **Escape** — pause or resume
-- **Restart** — use the on-screen restart button
 
 ## Run locally
 
-Install dependencies and start the server:
+Install dependencies and start the game:
 
 ```sh
 npm install
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in a modern browser.
+Then open [http://localhost:3000](http://localhost:3000) in a modern browser.
 
 ## Built with voice
 
