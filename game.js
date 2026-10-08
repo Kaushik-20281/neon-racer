@@ -1602,6 +1602,10 @@ const opponents = [
     car: createCar({ bodyColor: 0xd4ae32, trimColor: 0x25312a, glassColor: 0x526c75, vehicleType: "taxi" }),
     startProgress: -0.25,
     progress: -0.25,
+    lastWaypointProgress: -0.25,
+    waypointDistance: 0,
+    stalledTime: 0,
+    stalledDistance: 0,
     laneOffset: -4.5,
     speed: 31,
     finished: false,
@@ -1611,6 +1615,10 @@ const opponents = [
     car: createCar({ bodyColor: 0x48788b, trimColor: 0x283238, glassColor: 0x526c75, vehicleType: "hatchback" }),
     startProgress: -0.52,
     progress: -0.52,
+    lastWaypointProgress: -0.52,
+    waypointDistance: 0,
+    stalledTime: 0,
+    stalledDistance: 0,
     laneOffset: 4.5,
     speed: 36,
     finished: false,
@@ -1620,6 +1628,10 @@ const opponents = [
     car: createCar({ bodyColor: 0x9b3930, trimColor: 0x292d30, glassColor: 0x526c75, vehicleType: "coupe" }),
     startProgress: -0.79,
     progress: -0.79,
+    lastWaypointProgress: -0.79,
+    waypointDistance: 0,
+    stalledTime: 0,
+    stalledDistance: 0,
     laneOffset: 0,
     speed: 42,
     finished: false,
@@ -1799,6 +1811,10 @@ function resetCar() {
   camera.lookAt(car.position);
   for (const opponent of opponents) {
     opponent.progress = opponent.startProgress;
+    opponent.lastWaypointProgress = opponent.startProgress;
+    opponent.waypointDistance = 0;
+    opponent.stalledTime = 0;
+    opponent.stalledDistance = 0;
     opponent.finished = false;
     opponent.finishTime = null;
     updateOpponentPose(opponent);
@@ -2297,7 +2313,9 @@ function updateOpponentPose(opponent) {
   );
 }
 
-for (const opponent of opponents) updateOpponentPose(opponent);
+for (const opponent of opponents) {
+  updateOpponentPose(opponent);
+}
 
 function getPlayerProgress() {
   if (raceState === "finished") return Math.PI * 6;
@@ -2322,9 +2340,50 @@ function updatePosition() {
   positionDisplay.textContent = getPlace(carsAhead + 1);
 }
 
+function recoverOpponentToRoad(opponent) {
+  const waypointProgress = opponent.lastWaypointProgress;
+  const waypointPosition = makeOvalPoint(startAngle + waypointProgress, opponent.laneOffset);
+  const waypointBlocked = isPositionBlocked(
+    waypointPosition.x,
+    waypointPosition.z,
+    waypointPosition.y,
+  );
+  if (!waypointBlocked) {
+    opponent.progress = waypointProgress;
+    updateOpponentPose(opponent);
+  }
+
+  for (let offset = 0.01; offset <= 0.5; offset += 0.01) {
+    const candidateProgress = Math.min(Math.PI * 6, waypointProgress + offset);
+    const candidatePosition = makeOvalPoint(startAngle + candidateProgress, opponent.laneOffset);
+    const nextPosition = makeOvalPoint(startAngle + Math.min(Math.PI * 6, candidateProgress + 0.01), opponent.laneOffset);
+    if (
+      isPositionBlocked(candidatePosition.x, candidatePosition.z, candidatePosition.y)
+      || isCityPathBlocked(candidatePosition, nextPosition)
+    ) continue;
+    opponent.progress = candidateProgress;
+    opponent.lastWaypointProgress = candidateProgress;
+    updateOpponentPose(opponent);
+    break;
+  }
+
+  opponent.waypointDistance = 0;
+  opponent.stalledTime = 0;
+  opponent.stalledDistance = 0;
+}
+
 function updateOpponents(deltaTime) {
   for (const opponent of opponents) {
     if (opponent.finished) continue;
+    opponent.stalledTime += deltaTime;
+    if (opponent.stalledTime >= 2) {
+      if (opponent.stalledDistance < 1) {
+        recoverOpponentToRoad(opponent);
+        continue;
+      }
+      opponent.stalledTime = 0;
+      opponent.stalledDistance = 0;
+    }
     const angle = startAngle + opponent.progress;
     const tangent = trackTangent(angle);
     const tangentLength = Math.hypot(tangent.x, tangent.z);
@@ -2334,9 +2393,20 @@ function updateOpponents(deltaTime) {
     );
     const nextAngle = startAngle + nextProgress;
     const nextPosition = makeOvalPoint(nextAngle, opponent.laneOffset);
-    if (isCityPathBlocked(opponent.car.position, nextPosition)) continue;
+    if (isCityPathBlocked(opponent.car.position, nextPosition)) {
+      continue;
+    }
 
+    opponent.stalledDistance += Math.hypot(
+      nextPosition.x - opponent.car.position.x,
+      nextPosition.z - opponent.car.position.z,
+    );
     opponent.progress = nextProgress;
+    opponent.waypointDistance += opponent.speed * deltaTime;
+    if (opponent.waypointDistance >= 5) {
+      opponent.lastWaypointProgress = opponent.progress;
+      opponent.waypointDistance %= 5;
+    }
     if (opponent.progress >= Math.PI * 6) {
       opponent.finished = true;
       opponent.finishTime = raceTime;
