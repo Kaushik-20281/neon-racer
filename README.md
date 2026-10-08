@@ -36,8 +36,6 @@ npm install
 npm start
 ```
 Play it here: https://neon-racer-59ol.onrender.com
-Then open [http://localhost:3000](http://localhost:3000) in a modern browser.
-
 ## Built with voice
 
 This project was built entirely by voice using Wispr Flow and GitHub Copilot.
