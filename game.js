@@ -104,6 +104,7 @@ const bridgeRampHalfAngle = 0.56;
 const lapCheckpointCount = 8;
 const checkpointSpacing = 45;
 const carCollisionRadius = 2.6;
+const cityGroundHeight = -0.18;
 
 function addCircleCollider(point, radius, minY = point.y, maxY = point.y + 10) {
   environmentColliders.push({
@@ -183,6 +184,14 @@ function isPositionBlocked(x, z, y) {
   return false;
 }
 
+function isInsideEnvironmentBounds(point, radius = 0) {
+  return environmentBounds
+    && point.x >= environmentBounds.minX + radius
+    && point.x <= environmentBounds.maxX - radius
+    && point.z >= environmentBounds.minZ + radius
+    && point.z <= environmentBounds.maxZ - radius;
+}
+
 function moveCarWithCollisions(deltaX, deltaZ, getHeight) {
   const steps = Math.max(1, Math.ceil(Math.hypot(deltaX, deltaZ) / 0.55));
   const stepX = deltaX / steps;
@@ -247,7 +256,7 @@ function createEnvironment(mode) {
   activeTheme = theme;
   environmentColliders = [];
   environmentBounds = mode === "hill" || mode === "checkpoint"
-    ? { minX: -220, maxX: 220, minZ: -620, maxZ: 90 }
+    ? mountainBounds
     : { minX: -180, maxX: 180, minZ: -150, maxZ: 150 };
   environmentRoot = new THREE.Group();
   environmentWorld = new THREE.Group();
@@ -261,7 +270,7 @@ function createEnvironment(mode) {
     new THREE.MeshStandardMaterial({ color: theme.ground, roughness: 1 }),
   );
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.16;
+  ground.position.y = mode === "hill" || mode === "checkpoint" ? -1 : cityGroundHeight;
   ground.receiveShadow = true;
   environmentRoot.add(ground);
   environmentRoot.add(new THREE.HemisphereLight(theme.hemisphere, theme.hemisphereGround, 1.55));
@@ -389,6 +398,34 @@ function getCityRoadPosition(x, z, referenceY) {
   };
 }
 
+function isCityPlacementClear(point, radius) {
+  if (!isInsideEnvironmentBounds(point, radius)) return false;
+  const roadClearance = trackWidth / 2 + 5.5 + radius;
+  for (let sample = 0; sample < trackSamples * 2; sample += 1) {
+    const angle = (sample / (trackSamples * 2)) * Math.PI * 2;
+    const roadX = centerX + radiusX * Math.sin(angle);
+    const roadZ = centerZ + radiusZ * Math.sin(2 * angle);
+    if (Math.hypot(point.x - roadX, point.z - roadZ) < roadClearance) return false;
+  }
+  return true;
+}
+
+function isCityBuildingPlacementClear(point, halfWidth, halfDepth, yaw) {
+  if (!isInsideEnvironmentBounds(point)) return false;
+  const roadClearance = trackWidth / 2 + 5.5 + 0.5;
+  for (let sample = 0; sample < trackSamples * 2; sample += 1) {
+    const angle = (sample / (trackSamples * 2)) * Math.PI * 2;
+    const offsetX = centerX + radiusX * Math.sin(angle) - point.x;
+    const offsetZ = centerZ + radiusZ * Math.sin(2 * angle) - point.z;
+    const localX = offsetX * Math.cos(yaw) - offsetZ * Math.sin(yaw);
+    const localZ = offsetX * Math.sin(yaw) + offsetZ * Math.cos(yaw);
+    const outsideX = Math.max(Math.abs(localX) - halfWidth, 0);
+    const outsideZ = Math.max(Math.abs(localZ) - halfDepth, 0);
+    if (Math.hypot(outsideX, outsideZ) < roadClearance) return false;
+  }
+  return true;
+}
+
 function makeOvalRibbon(innerOffset, outerOffset, y, material, target) {
   const positions = [];
   const indices = [];
@@ -405,7 +442,10 @@ function makeOvalRibbon(innerOffset, outerOffset, y, material, target) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
-  geometry.computeVertexNormals();
+  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(
+    Array.from({ length: positions.length / 3 }, () => [0, 1, 0]).flat(),
+    3,
+  ));
   const ribbon = new THREE.Mesh(geometry, material);
   ribbon.receiveShadow = true;
   target.add(ribbon);
@@ -550,7 +590,7 @@ function addCityScenery() {
   const buildingInstances = new THREE.InstancedMesh(
     new THREE.BoxGeometry(1, 1, 1),
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88 }),
-    64,
+    48,
   );
   buildingInstances.castShadow = true;
   buildingInstances.receiveShadow = true;
@@ -564,31 +604,12 @@ function addCityScenery() {
 
   function addBuilding(angle, side, offset, width, depth, height) {
     const point = makeOvalPoint(angle, side * offset, 0);
+    point.y = cityGroundHeight;
     const tangent = trackTangent(angle);
     const yaw = Math.atan2(-tangent.x, -tangent.z);
-    const roadClearance = trackWidth / 2 + carCollisionRadius;
-    let overlapsRoad = false;
-    for (let sample = 0; sample < trackSamples; sample += 1) {
-      const roadAngle = (sample / trackSamples) * Math.PI * 2;
-      const roadPoint = makeOvalPoint(roadAngle);
-      if (
-        roadPoint.y + 1.4 < point.y - 0.2
-        || roadPoint.y > point.y + height
-      ) continue;
-      const offsetX = roadPoint.x - point.x;
-      const offsetZ = roadPoint.z - point.z;
-      const localX = offsetX * Math.cos(yaw) - offsetZ * Math.sin(yaw);
-      const localZ = offsetX * Math.sin(yaw) + offsetZ * Math.cos(yaw);
-      const outsideX = Math.max(Math.abs(localX) - width / 2, 0);
-      const outsideZ = Math.max(Math.abs(localZ) - depth / 2, 0);
-      if (Math.hypot(outsideX, outsideZ) < roadClearance) {
-        overlapsRoad = true;
-        break;
-      }
-    }
-    if (overlapsRoad) return;
+    if (!isCityBuildingPlacementClear(point, width / 2, depth / 2, yaw)) return;
     const color = buildingColors[Math.floor(random() * buildingColors.length)];
-    buildingTransform.position.set(point.x, point.y + height / 2 - 0.13, point.z);
+    buildingTransform.position.set(point.x, point.y + height / 2, point.z);
     buildingTransform.rotation.set(0, yaw, 0);
     buildingTransform.scale.set(width, height, depth);
     buildingTransform.updateMatrix();
@@ -599,7 +620,7 @@ function addCityScenery() {
       width / 2,
       depth / 2,
       yaw,
-      point.y - 0.2,
+      point.y,
       point.y + height,
     );
     buildingCount += 1;
@@ -638,15 +659,14 @@ function addCityScenery() {
     }
   }
 
-  for (let i = 0; i < 44; i += 1) {
-    const angle = (i / 44) * Math.PI * 2 + (random() - 0.5) * 0.08;
-    const side = i % 2 === 0 ? 1 : -1;
-    addBuilding(angle, side, 24 + random() * 14, 12 + random() * 8, 12 + random() * 9, 24 + random() * 58);
-  }
-  for (let i = 0; i < 20; i += 1) {
-    const angle = (i / 20) * Math.PI * 2 + 0.12;
-    const side = i % 2 === 0 ? -1 : 1;
-    addBuilding(angle, side, 35 + random() * 14, 13 + random() * 10, 14 + random() * 8, 13 + random() * 26);
+  for (let i = 0; i < 24; i += 1) {
+    const angle = ((i + 0.5) / 24) * Math.PI * 2;
+    for (const side of [-1, 1]) {
+      const width = 10 + random() * 4;
+      const depth = 10 + random() * 3;
+      const offset = trackWidth / 2 + 5.5 + width / 2 + 2;
+      addBuilding(angle, side, offset, width, depth, 18 + random() * 42);
+    }
   }
   buildingInstances.count = buildingCount;
   buildingInstances.instanceMatrix.needsUpdate = true;
@@ -675,8 +695,10 @@ function addCityScenery() {
 
   function addTree(angle, side, offset) {
     const point = makeOvalPoint(angle, side * offset, 0);
-    addCircleCollider(point, 3.3, point.y, point.y + 9);
-    treeTransform.position.set(point.x, point.y + 2.35, point.z);
+    point.y = cityGroundHeight;
+    if (!isCityPlacementClear(point, 3.5)) return;
+    addCircleCollider(point, 3.5, point.y, point.y + 10);
+    treeTransform.position.set(point.x, point.y + 2.4, point.z);
     treeTransform.rotation.set(0, 0, 0);
     treeTransform.scale.set(1, 1, 1);
     treeTransform.updateMatrix();
@@ -698,6 +720,8 @@ function addCityScenery() {
 
   function addStreetLamp(angle, side, offset) {
     const point = makeOvalPoint(angle, side * offset, 0);
+    point.y = cityGroundHeight;
+    if (!isCityPlacementClear(point, 1.6)) return;
     const lamp = new THREE.Group();
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.19, 7.4, 8), lampMetal);
     pole.position.y = 3.7;
@@ -712,12 +736,14 @@ function addCityScenery() {
     lamp.position.set(point.x, point.y, point.z);
     const tangent = trackTangent(angle);
     lamp.rotation.y = Math.atan2(-tangent.x, -tangent.z);
-    addCircleCollider(point, 0.75, point.y, point.y + 8);
+    addCircleCollider(point, 1.6, point.y, point.y + 8);
     environmentWorld.add(lamp);
   }
 
   function addTrafficSignal(angle, side) {
-    const point = makeOvalPoint(angle, side * 12.5, 0);
+    const point = makeOvalPoint(angle, side * 17.2, 0);
+    point.y = cityGroundHeight;
+    if (!isCityPlacementClear(point, 1.1)) return;
     const signal = new THREE.Group();
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 5.2, 8), lampMetal);
     pole.position.y = 2.6;
@@ -739,15 +765,15 @@ function addCityScenery() {
       signal.add(bulb);
     }
     signal.position.set(point.x, point.y, point.z);
-    addCircleCollider(point, 0.7, point.y, point.y + 5.5);
+    addCircleCollider(point, 1.1, point.y, point.y + 5.5);
     environmentWorld.add(signal);
   }
 
   for (let i = 0; i < 48; i += 1) {
     const angle = (i / 48) * Math.PI * 2;
     const side = i % 2 === 0 ? 1 : -1;
-    addTree(angle, side, 16 + (i % 3) * 1.25);
-    if (i % 2 === 0) addStreetLamp(angle, -side, 11.5);
+    addTree(angle, side, 21 + (i % 3) * 1.5);
+    if (i % 2 === 0) addStreetLamp(angle, -side, 17.5);
   }
   trunkInstances.count = treeCount;
   trunkInstances.instanceMatrix.needsUpdate = true;
@@ -883,6 +909,8 @@ const hillCurve = new THREE.CatmullRomCurve3([
 ], false, "centripetal");
 const hillLength = hillCurve.getLength();
 const hillRoadWidth = 17;
+const hillTerrainSamples = Array.from({ length: 321 }, (_, index) => hillCurve.getPointAt(index / 320));
+const mountainBounds = { minX: -220, maxX: 220, minZ: -620, maxZ: 90 };
 
 function hillRoadPoint(progress, lateralOffset = 0, elevationOffset = 0) {
   const t = THREE.MathUtils.clamp(progress / hillLength, 0, 1);
@@ -900,6 +928,86 @@ function hillRoadPointExtended(progress, lateralOffset = 0, elevationOffset = 0)
   const endpoint = hillRoadPoint(endpointProgress, lateralOffset, elevationOffset);
   const tangent = hillCurve.getTangentAt(endpointProgress / hillLength);
   return endpoint.addScaledVector(tangent, progress - endpointProgress);
+}
+
+function getMountainTerrainHeight(x, z) {
+  let nearestDistanceSquared = Infinity;
+  let nearestIndex = 0;
+  for (let i = 0; i < hillTerrainSamples.length; i += 1) {
+    const sample = hillTerrainSamples[i];
+    const distanceSquared = (sample.x - x) ** 2 + (sample.z - z) ** 2;
+    if (distanceSquared < nearestDistanceSquared) {
+      nearestDistanceSquared = distanceSquared;
+      nearestIndex = i;
+    }
+  }
+  let routeDistanceSquared = Infinity;
+  let routeHeight = hillTerrainSamples[nearestIndex].y;
+  const firstSegment = Math.max(0, nearestIndex - 2);
+  const lastSegment = Math.min(hillTerrainSamples.length - 2, nearestIndex + 1);
+  for (let i = firstSegment; i <= lastSegment; i += 1) {
+    const start = hillTerrainSamples[i];
+    const end = hillTerrainSamples[i + 1];
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const lengthSquared = dx * dx + dz * dz;
+    const fraction = THREE.MathUtils.clamp(((x - start.x) * dx + (z - start.z) * dz) / lengthSquared, 0, 1);
+    const offsetX = x - (start.x + dx * fraction);
+    const offsetZ = z - (start.z + dz * fraction);
+    const distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
+    if (distanceSquared < routeDistanceSquared) {
+      routeDistanceSquared = distanceSquared;
+      routeHeight = THREE.MathUtils.lerp(start.y, end.y, fraction);
+    }
+  }
+  const distance = Math.sqrt(routeDistanceSquared);
+  const blend = THREE.MathUtils.clamp((distance - 18) / 92, 0, 1);
+  const smoothBlend = blend * blend * (3 - 2 * blend);
+  return THREE.MathUtils.lerp(routeHeight - 0.45, -0.5, smoothBlend);
+}
+
+function getMountainGroundPoint(progress, lateralOffset) {
+  const point = hillRoadPoint(progress, lateralOffset);
+  point.y = getMountainTerrainHeight(point.x, point.z);
+  return point;
+}
+
+function isMountainPlacementClear(point, radius) {
+  if (!isInsideEnvironmentBounds(point, radius)) return false;
+  const roadClearance = hillRoadWidth / 2 + 1.4 + radius;
+  for (const sample of hillTerrainSamples) {
+    if (Math.hypot(point.x - sample.x, point.z - sample.z) < roadClearance) return false;
+  }
+  return true;
+}
+
+function buildMountainTerrain() {
+  const columns = 44;
+  const rows = 71;
+  const positions = [];
+  const indices = [];
+  for (let row = 0; row <= rows; row += 1) {
+    const z = mountainBounds.minZ + ((mountainBounds.maxZ - mountainBounds.minZ) * row) / rows;
+    for (let column = 0; column <= columns; column += 1) {
+      const x = mountainBounds.minX + ((mountainBounds.maxX - mountainBounds.minX) * column) / columns;
+      positions.push(x, getMountainTerrainHeight(x, z), z);
+      if (row < rows && column < columns) {
+        const index = row * (columns + 1) + column;
+        indices.push(index, index + columns + 1, index + 1);
+        indices.push(index + 1, index + columns + 1, index + columns + 2);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const terrain = new THREE.Mesh(
+    geometry,
+    new THREE.MeshStandardMaterial({ color: activeTheme.ground, roughness: 1, side: THREE.DoubleSide }),
+  );
+  terrain.receiveShadow = false;
+  environmentWorld.add(terrain);
 }
 
 function buildHillClimb() {
@@ -932,6 +1040,7 @@ function buildHillClimb() {
   }));
   road.receiveShadow = true;
   environmentWorld.add(road);
+  buildMountainTerrain();
 
   const edgeMaterial = curbMaterial;
   for (const points of [leftEdge, rightEdge]) {
@@ -968,12 +1077,14 @@ function buildHillClimb() {
     const railPoints = [];
     for (let i = 0; i <= 180; i += 1) {
       const progress = -20 + (i / 180) * (hillLength + 32);
-      const point = hillRoadPointExtended(progress, side * (hillRoadWidth / 2 + 1.35), 1.1);
+      const point = hillRoadPointExtended(progress, side * (hillRoadWidth / 2 + 1.35));
+      point.y = getMountainTerrainHeight(point.x, point.z) + 1.4;
       railPoints.push(point);
       if (i % 3 === 0) {
         transform.position.copy(point);
+        transform.position.y -= 0.7;
         transform.rotation.set(0, 0, 0);
-        transform.scale.set(1, 1, 1);
+        transform.scale.set(1, 1.4, 1);
         transform.updateMatrix();
         railPostInstances.setMatrixAt(railPostCount, transform.matrix);
         railPostCount += 1;
@@ -992,7 +1103,7 @@ function buildHillClimb() {
       new THREE.TubeGeometry(new THREE.CatmullRomCurve3(railPoints), 180, 0.12, 6, false),
       railMaterial,
     ));
-    const lowerRailPoints = railPoints.map((point) => point.clone().add(new THREE.Vector3(0, -0.45, 0)));
+    const lowerRailPoints = railPoints.map((point) => point.clone().add(new THREE.Vector3(0, -0.55, 0)));
     environmentWorld.add(new THREE.Mesh(
       new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lowerRailPoints), 180, 0.08, 6, false),
       railMaterial,
@@ -1012,27 +1123,32 @@ function buildHillClimb() {
     new THREE.MeshStandardMaterial({ color: activeTheme.trees[0], roughness: 0.97 }),
     168,
   ));
+  let pineCount = 0;
   for (let i = 0; i < 168; i += 1) {
     const fraction = random();
     const side = random() < 0.5 ? -1 : 1;
-    const point = hillRoadPoint(fraction * hillLength, side * (20 + random() * 68), -1);
+    const point = getMountainGroundPoint(fraction * hillLength, side * (20 + random() * 68));
     const scale = 0.8 + random() * 1.15;
-    addCircleCollider(point, 3.1 * scale, point.y, point.y + 10 * scale);
+    if (!isMountainPlacementClear(point, 2.5 * scale)) continue;
+    addCircleCollider(point, 2.5 * scale, point.y, point.y + 11 * scale);
     transform.position.set(point.x, point.y + 2 * scale, point.z);
     transform.rotation.set(0, random() * Math.PI * 2, 0);
     transform.scale.set(scale, scale, scale);
     transform.updateMatrix();
-    pineTrunks.setMatrixAt(i, transform.matrix);
+    pineTrunks.setMatrixAt(pineCount, transform.matrix);
     for (let tier = 0; tier < pineCrowns.length; tier += 1) {
       transform.position.set(point.x, point.y + (3.2 + tier * 1.25) * scale, point.z);
       transform.scale.set(2.25 * scale, 4.4 * scale, 2.25 * scale);
       transform.updateMatrix();
-      pineCrowns[tier].setMatrixAt(i, transform.matrix);
+      pineCrowns[tier].setMatrixAt(pineCount, transform.matrix);
     }
+    pineCount += 1;
   }
+  pineTrunks.count = pineCount;
   pineTrunks.instanceMatrix.needsUpdate = true;
   pineTrunks.castShadow = true;
   for (const crowns of pineCrowns) {
+    crowns.count = pineCount;
     crowns.instanceMatrix.needsUpdate = true;
     crowns.castShadow = true;
   }
@@ -1048,10 +1164,11 @@ function buildHillClimb() {
   for (let i = 0; i < 200; i += 1) {
     const fraction = random();
     const side = random() < 0.5 ? -1 : 1;
-    const point = hillRoadPoint(fraction * hillLength, side * (62 + random() * 110), -8);
+    const point = getMountainGroundPoint(fraction * hillLength, side * (62 + random() * 110));
     const size = 7 + random() * 12;
-    addCircleCollider(point, size * 1.8, point.y, point.y + size * 1.5);
-    transform.position.set(point.x, point.y + size * 0.42, point.z);
+    if (!isMountainPlacementClear(point, size * 2)) continue;
+    addCircleCollider(point, size * 1.9, point.y, point.y + size * 1.5);
+    transform.position.set(point.x, point.y + size * 0.55, point.z);
     transform.rotation.set(random() * 0.5, random() * Math.PI, random() * 0.35);
     transform.scale.set(size * (1.1 + random() * 0.8), size * (0.7 + random() * 0.5), size * (1 + random() * 0.7));
     transform.updateMatrix();
