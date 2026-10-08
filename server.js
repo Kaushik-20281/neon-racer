@@ -11,7 +11,7 @@ const recordsFile = path.join(dataDirectory, "records.json");
 app.use(express.json({ limit: "256kb" }));
 
 const validModes = new Set(["circuit", "hill", "ghost", "checkpoint"]);
-const validVehicles = new Set(["sports", "rally", "truck"]);
+const validVehicles = new Set(["sports", "rally", "taxi", "truck"]);
 
 function readRecords() {
   try {
@@ -175,7 +175,7 @@ app.use(express.static(__dirname));
 
 if (require.main === module) {
   app.listen(port, () => {
-    console.log(`Coast Rally is ready at http://localhost:${port}`);
+    console.log(`Metro Drive is ready at http://localhost:${port}`);
   });
 }
 

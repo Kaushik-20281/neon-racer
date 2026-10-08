@@ -1,8 +1,8 @@
 {
-  "name": "neon-racing",
+  "name": "metro-drive",
   "version": "1.0.0",
   "private": true,
-  "description": "A neon-lit 3D arcade racing game",
+  "description": "A four-mode 3D driving game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

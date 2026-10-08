@@ -1,12 +1,12 @@
 :root {
   color-scheme: dark;
-  font-family: "Rajdhani", sans-serif;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --cyan: #16e6ff;
-  --pink: #ff3dbb;
-  --ink: #070816;
-  --muted: #8c94b7;
+  --cyan: #d49a59;
+  --pink: #d49a59;
+  --ink: #202224;
+  --muted: #a6a9aa;
 }
 
 * {
@@ -50,8 +50,8 @@ button {
   content: "";
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(5, 6, 18, 0.66), transparent 23%, transparent 72%, rgba(5, 6, 18, 0.73)),
-    radial-gradient(ellipse at center, transparent 38%, rgba(5, 6, 18, 0.32) 100%);
+    linear-gradient(180deg, rgba(24, 39, 48, 0.16), transparent 23%, transparent 72%, rgba(24, 39, 34, 0.2)),
+    radial-gradient(ellipse at center, transparent 46%, rgba(24, 39, 34, 0.08) 100%);
 }
 
 .topbar,
@@ -461,19 +461,20 @@ kbd {
 }
 
 .loading {
-  top: 50%;
-  left: 50%;
+  z-index: 30;
+  inset: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   color: #c6d8eb;
   font: 9px "Orbitron", sans-serif;
   letter-spacing: 1.5px;
-  transform: translate(-50%, -50%);
+  background: rgba(10, 14, 18, 0.9);
   transition: opacity 300ms ease;
 }
 
-.loading span {
+.loading-pulse {
   width: 8px;
   height: 8px;
   border: 1px solid var(--cyan);
@@ -485,6 +486,10 @@ kbd {
 .loading.hidden {
   opacity: 0;
   pointer-events: none;
+}
+
+.loading[hidden] {
+  display: none;
 }
 
 .countdown {
@@ -657,6 +662,7 @@ kbd {
 
 .ghost-label,
 .run-message {
+  z-index: 25;
   position: absolute;
   z-index: 2;
   left: 50%;
@@ -779,8 +785,8 @@ kbd {
 
 .vehicle-options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
   text-align: left;
 }
 
@@ -822,6 +828,14 @@ kbd {
   --vehicle-color: #ffc857;
 }
 
+.city-hatchback {
+  --vehicle-color: #78a77a;
+}
+
+.taxi {
+  --vehicle-color: #f0c928;
+}
+
 .vehicle-card:hover {
   transform: translateY(-3px);
 }
@@ -845,6 +859,9 @@ kbd {
   height: 62px;
   margin: 0 0 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--vehicle-color) 32%, transparent);
+  background:
+    radial-gradient(circle at calc(50% - 39px) calc(100% - 13px), #282b2a 0 5px, #aeb5b3 5.5px 7px, #282b2a 7.5px 9px, transparent 9.5px),
+    radial-gradient(circle at calc(50% + 39px) calc(100% - 13px), #282b2a 0 5px, #aeb5b3 5.5px 7px, #282b2a 7.5px 9px, transparent 9.5px);
 }
 
 .vehicle-art::before,
@@ -859,25 +876,36 @@ kbd {
   bottom: 13px;
   width: 122px;
   height: 23px;
-  border: 1px solid color-mix(in srgb, var(--vehicle-color) 85%, white);
-  border-radius: 13px 20px 6px 6px;
-  background: color-mix(in srgb, var(--vehicle-color) 30%, #11172a);
-  box-shadow: 0 0 15px color-mix(in srgb, var(--vehicle-color) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--vehicle-color) 82%, white);
+  border-radius: 9px 12px 5px 5px;
+  background: color-mix(in srgb, var(--vehicle-color) 76%, #323a39);
 }
 
 .vehicle-art::after {
   bottom: 34px;
   width: 58px;
   height: 15px;
-  border: 1px solid color-mix(in srgb, var(--vehicle-color) 72%, white);
-  border-radius: 17px 17px 3px 3px;
-  background: color-mix(in srgb, var(--vehicle-color) 22%, #101629);
+  border: 1px solid color-mix(in srgb, var(--vehicle-color) 76%, white);
+  border-radius: 16px 16px 3px 3px;
+  background: linear-gradient(180deg, #78909a 0 60%, color-mix(in srgb, var(--vehicle-color) 76%, #323a39) 62%);
+  box-shadow: none;
+}
+
+.sports-car .vehicle-art::after {
+  bottom: 36px;
+  width: 68px;
+  height: 12px;
+  border-radius: 20px 20px 2px 2px;
+}
+
+.taxi .vehicle-art::after {
+  box-shadow: 0 -9px 0 -4px #35352d;
 }
 
 .truck .vehicle-art::before {
   width: 130px;
   height: 30px;
-  border-radius: 5px 13px 4px 4px;
+  border-radius: 5px 8px 4px 4px;
 }
 
 .truck .vehicle-art::after {
@@ -1033,6 +1061,7 @@ kbd {
 
 @media (max-width: 760px) {
   .vehicle-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px;
   }
 
@@ -1517,5 +1546,632 @@ kbd {
 @media (max-width: 480px) {
   .start-panel {
     padding: 30px 22px;
+  }
+}
+
+:root {
+  --surface: #252728;
+  --surface-raised: #2c2f30;
+  --line: #414546;
+  --text: #f4f2ee;
+  --muted: #a6a9aa;
+  --accent: #d49a59;
+  --cyan: var(--accent);
+  --pink: var(--accent);
+  --ink: #202224;
+}
+
+* {
+  text-shadow: none !important;
+}
+
+body {
+  color: var(--text);
+  background: #202224;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.game-shell::after {
+  background: linear-gradient(180deg, rgba(14, 15, 16, 0.38), transparent 25%, transparent 72%, rgba(14, 15, 16, 0.44));
+}
+
+.topbar {
+  height: 72px;
+  padding-inline: clamp(20px, 4vw, 64px);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(25, 27, 28, 0.78), rgba(25, 27, 28, 0.08));
+}
+
+.brand,
+.race-status,
+.reset-button,
+.hud-label,
+.lap-caption,
+.track-caption,
+.controls,
+.camera-label,
+.start-panel h1,
+.menu-eyebrow,
+.secondary-button,
+.start-button,
+.finish-panel h1,
+.finish-kicker,
+.finish-time-label,
+.finish-restart,
+.vehicle-category,
+.vehicle-trait,
+.mode-number {
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.055em;
+}
+
+.brand {
+  gap: 10px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  color: var(--accent);
+  font: 700 17px Inter, "Segoe UI", Arial, sans-serif;
+  transform: none;
+  box-shadow: none;
+}
+
+.brand-light {
+  color: #b5b8b8;
+}
+
+.race-status {
+  color: #e3e1dd;
+  font-size: 10px;
+}
+
+.live-dot,
+.camera-dot {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.status-divider {
+  color: #858889;
+}
+
+.reset-button,
+.secondary-button {
+  border: 1px solid #505455;
+  border-radius: 7px;
+  background: #292c2d;
+  color: #e9e7e2;
+  font: 600 11px Inter, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.reset-button:hover,
+.secondary-button:hover {
+  border-color: var(--accent);
+  background: #35302a;
+  box-shadow: none;
+}
+
+.reset-button span,
+.camera-icon {
+  color: var(--accent);
+}
+
+.race-hud {
+  top: 96px;
+  left: clamp(18px, 4vw, 60px);
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.speed-card,
+.lap-card,
+.timer-card,
+.position-card,
+.hill-progress-card {
+  min-width: 112px;
+  padding: 13px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: rgba(30, 32, 33, 0.84);
+  backdrop-filter: blur(8px);
+}
+
+.speed-card {
+  min-width: 156px;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.lap-card {
+  min-width: 105px;
+}
+
+.timer-card,
+.position-card {
+  min-width: 118px;
+}
+
+.hill-progress-card {
+  min-width: 168px;
+}
+
+.hud-label {
+  color: #b4b6b5;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.hud-label span,
+.speed-unit,
+.lap-total,
+.position-total {
+  color: #a2a5a4;
+}
+
+.speedometer {
+  width: 126px;
+  height: 56px;
+  margin: 7px 0 -5px;
+}
+
+.speedometer-track {
+  stroke: #55595a;
+  stroke-width: 5;
+}
+
+.speedometer-fill {
+  stroke: var(--accent);
+  stroke-width: 5;
+  filter: none;
+}
+
+.speedometer-needle {
+  stroke: #f2f0ec;
+  stroke-width: 2;
+  filter: none;
+}
+
+.speedometer-hub {
+  fill: var(--accent);
+  filter: none;
+}
+
+.speedometer-ticks,
+.speedometer text {
+  display: none;
+}
+
+.speed-reading,
+.lap-reading,
+.timer-reading,
+.position-reading,
+.hill-progress-reading {
+  color: var(--text);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+}
+
+.speed-reading {
+  margin-top: 1px;
+  font-size: 30px;
+  font-weight: 650;
+}
+
+.lap-reading {
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 650;
+}
+
+.timer-reading {
+  margin-top: 9px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.position-reading {
+  margin-top: 7px;
+  font-size: 23px;
+  font-weight: 650;
+}
+
+.hill-progress-reading {
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 650;
+}
+
+.hill-progress-reading span:last-child {
+  color: var(--accent);
+}
+
+.lap-caption {
+  margin-top: 7px;
+  color: #a6a9aa;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+
+.hill-progress-track,
+.speed-meter {
+  border-radius: 99px;
+  background: #454849;
+}
+
+.hill-progress-track span,
+.speed-meter span {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.track-caption {
+  right: clamp(18px, 4vw, 60px);
+  color: #f1efeb;
+  font-size: 9px;
+}
+
+.caption-line {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+.caption-coordinate {
+  color: #c0c1bf;
+}
+
+.bottom-bar {
+  right: clamp(18px, 4vw, 60px);
+  left: clamp(18px, 4vw, 60px);
+  height: 64px;
+  border-top-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(0deg, rgba(25, 27, 28, 0.8), rgba(25, 27, 28, 0.06));
+}
+
+.controls {
+  color: #e1dfdb;
+  font-size: 9px;
+}
+
+.control-title {
+  color: var(--accent);
+}
+
+kbd {
+  border: 1px solid #545859;
+  border-radius: 4px;
+  background: #2c2f30;
+  color: #f1efeb;
+  box-shadow: none;
+}
+
+.loading {
+  color: #e7e4df;
+  font: 600 11px Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.loading-pulse {
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
+.countdown,
+.countdown.go {
+  color: var(--text);
+}
+
+.start-screen,
+.finish-screen {
+  background: rgba(17, 18, 19, 0.76);
+  backdrop-filter: blur(5px);
+}
+
+.start-panel,
+.finish-panel {
+  border: 1px solid #414546;
+  border-radius: 14px;
+  background: #252728;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+}
+
+.start-panel h1,
+.finish-panel h1 {
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+}
+
+.start-panel h1 span,
+.finish-panel h1 span {
+  color: var(--accent);
+}
+
+.menu-eyebrow,
+.finish-kicker {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+}
+
+.main-menu-view {
+  position: relative;
+  isolation: isolate;
+  min-height: min(570px, 82vh);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: clamp(34px, 7vh, 64px) 20px clamp(112px, 20vh, 160px);
+}
+
+.main-menu-view::before {
+  position: absolute;
+  z-index: -1;
+  right: -2%;
+  bottom: 0;
+  left: -2%;
+  height: 58%;
+  background-color: #383c3c;
+  background-image:
+    repeating-linear-gradient(90deg, transparent 0 23px, rgba(227, 220, 205, 0.17) 23px 25px, transparent 25px 39px),
+    repeating-linear-gradient(0deg, transparent 0 18px, rgba(227, 220, 205, 0.12) 18px 20px, transparent 20px 31px),
+    linear-gradient(180deg, #3d4141, #292c2d);
+  clip-path: polygon(
+    0 30%, 7% 30%, 7% 12%, 15% 12%, 15% 37%, 21% 37%, 21% 18%,
+    29% 18%, 29% 5%, 39% 5%, 39% 35%, 46% 35%, 46% 19%, 54% 19%,
+    54% 0, 64% 0, 64% 31%, 72% 31%, 72% 13%, 81% 13%, 81% 38%,
+    88% 38%, 88% 21%, 96% 21%, 96% 34%, 100% 34%, 100% 100%, 0 100%
+  );
+  content: "";
+  opacity: 0.9;
+}
+
+.main-menu-view::after {
+  position: absolute;
+  z-index: -1;
+  right: -3%;
+  bottom: -1px;
+  left: -3%;
+  height: 16%;
+  background: linear-gradient(180deg, rgba(212, 154, 89, 0.12), #1f2122 82%);
+  content: "";
+}
+
+.main-menu-view > * {
+  position: relative;
+  z-index: 1;
+}
+
+.start-panel:has(.main-menu-view:not([hidden])) {
+  width: min(100%, 900px);
+  padding: 0 clamp(20px, 4vw, 48px);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(32, 34, 35, 0.92);
+}
+
+.start-panel:has(.main-menu-view:not([hidden])) .main-menu-view {
+  min-height: min(570px, 82vh);
+}
+
+.main-menu-view h1 {
+  margin: 16px 0 4px;
+  font-size: clamp(42px, 8vw, 74px);
+}
+
+.menu-description {
+  margin: 8px 0 28px;
+  color: #d0ceca;
+  font-size: 18px;
+}
+
+.main-menu-actions,
+.pause-actions {
+  gap: 10px;
+}
+
+.start-button,
+.finish-restart {
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: #201d19;
+  font: 700 12px Inter, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.06em;
+  box-shadow: none;
+}
+
+.start-button:hover,
+.finish-restart:hover {
+  background: #e0ad73;
+  box-shadow: none;
+}
+
+.start-button span,
+.finish-restart span {
+  color: inherit;
+}
+
+.secondary-button {
+  min-height: 42px;
+}
+
+.start-intro,
+.vehicle-description,
+.mode-card > span:last-child {
+  color: #c0c1bf;
+}
+
+.mode-options {
+  gap: 10px;
+}
+
+.mode-card,
+.vehicle-card {
+  border: 1px solid #444849;
+  border-radius: 9px;
+  background: #2b2e2f;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.mode-card:hover,
+.mode-card.selected,
+.mode-card[data-mode="hill"].selected,
+.mode-card[data-mode="hill"]:hover,
+.vehicle-card.selected {
+  border-color: var(--accent);
+  background: #33302b;
+  box-shadow: inset 0 0 0 1px rgba(212, 154, 89, 0.15);
+}
+
+.mode-card:focus-visible,
+.vehicle-card:focus-visible {
+  outline-color: var(--accent);
+}
+
+.mode-number,
+.mode-card[data-mode="hill"] .mode-number,
+.vehicle-category,
+.vehicle-trait,
+.vehicle-card {
+  --vehicle-color: var(--accent);
+}
+
+.vehicle-options {
+  gap: 10px;
+}
+
+.vehicle-card {
+  padding: 13px;
+}
+
+.vehicle-art {
+  border-bottom-color: #4b4d4c;
+}
+
+.vehicle-stats,
+.vehicle-art {
+  border-color: #454849;
+}
+
+.vehicle-stats > span > span,
+.vehicle-prompt,
+.finish-kicker,
+.finish-time-label {
+  color: #b6b7b4;
+}
+
+.vehicle-stats strong {
+  color: var(--text);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.vehicle-stats small {
+  color: #b6b7b4;
+}
+
+.start-tip,
+.control-guide p,
+.leaderboard-table {
+  color: #e0ded9;
+}
+
+.control-guide p span,
+.records-table th,
+.leaderboard-table th {
+  color: #b1b3b0;
+}
+
+.records-table-wrap {
+  border-color: #454849;
+  border-radius: 8px;
+}
+
+.records-table,
+.leaderboard-table th,
+.leaderboard-table td {
+  border-bottom-color: #414546;
+}
+
+.ghost-label,
+.run-message {
+  border-color: #4b4d4c;
+  border-radius: 7px;
+  background: rgba(35, 37, 38, 0.94);
+  color: var(--text);
+}
+
+.ghost-label span,
+.finish-panel h1 span,
+.finish-place,
+.finish-time-label,
+.leaderboard-table td:first-child,
+.leaderboard-table td:last-child {
+  color: var(--accent);
+}
+
+.finish-panel {
+  border-radius: 14px;
+}
+
+.finish-time,
+.finish-best-lap {
+  color: var(--text);
+}
+
+.leaderboard-entry input {
+  border: 1px solid #505455;
+  border-radius: 6px;
+  background: #1f2122;
+  color: var(--text);
+}
+
+.leaderboard-entry button {
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #201d19;
+}
+
+.leaderboard-error {
+  color: #e0ad73;
+}
+
+@media (max-width: 650px) {
+  .race-hud {
+    gap: 6px;
+  }
+
+  .speed-card,
+  .lap-card,
+  .timer-card,
+  .position-card,
+  .hill-progress-card {
+    padding: 10px;
+  }
+
+  .start-panel:has(.main-menu-view:not([hidden])) {
+    padding-inline: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

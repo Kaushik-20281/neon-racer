@@ -61,3 +61,27 @@ test("records retain the fastest path and the separate best checkpoint score", a
   assert.equal(result.records.length, 1);
   assert.equal(result.records[0].bestScore, 5);
 });
+
+test("taxi runs can be saved and retrieved independently", async () => {
+  const runPath = [
+    { x: 0, y: 0, z: 0, heading: 0 },
+    { x: 1, y: 0, z: 1, heading: 0.2 },
+  ];
+  const response = await fetch(`${baseUrl}/api/records`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: "circuit",
+      vehicle: "taxi",
+      time: 42,
+      score: 0,
+      path: runPath,
+    }),
+  });
+  assert.equal(response.status, 201);
+
+  const lookup = await fetch(`${baseUrl}/api/records?mode=circuit&vehicle=taxi`);
+  const result = await lookup.json();
+  assert.equal(result.records.length, 1);
+  assert.equal(result.records[0].vehicle, "taxi");
+});

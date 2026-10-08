@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#e6d3a9" />
-    <title>Coast Rally</title>
+    <meta name="theme-color" content="#202224" />
+    <title>Metro Drive</title>
     <link rel="stylesheet" href="/style.css" />
     <script type="importmap">
       {
@@ -18,12 +18,12 @@
   </head>
   <body>
     <main class="game-shell">
-      <div id="game" aria-label="Coast Rally 3D game"></div>
+      <div id="game" aria-label="Metro Drive 3D game"></div>
 
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Coast Rally home">
-          <span class="brand-mark">C</span>
-          <span>COAST<span class="brand-light"> RALLY</span></span>
+        <a class="brand" href="/" aria-label="Metro Drive home">
+          <span class="brand-mark">M</span>
+          <span>METRO<span class="brand-light"> DRIVE</span></span>
         </a>
         <div id="race-status" class="race-status"><span class="live-dot"></span> <span id="mode-status">CIRCUIT RACE</span> <span class="status-divider">/</span> <span id="track-status">TRACK 01</span></div>
         <button id="reset-button" class="reset-button" type="button">RESTART <span>↻</span></button>
@@ -35,20 +35,15 @@
           <svg class="speedometer" viewBox="0 0 150 88" role="img" aria-label="Live speedometer in kilometers per hour">
             <path class="speedometer-track" d="M 15 75 A 60 60 0 0 1 135 75" />
             <path id="speedometer-fill" class="speedometer-fill" d="M 15 75 A 60 60 0 0 1 135 75" />
-            <g class="speedometer-ticks">
-              <path d="M 17 75 L 25 75 M 25 45 L 32 49 M 45 23 L 49 31 M 75 15 L 75 24 M 105 23 L 101 31 M 125 45 L 118 49 M 133 75 L 125 75" />
-            </g>
             <line id="speedometer-needle" class="speedometer-needle" x1="75" y1="75" x2="75" y2="30" />
             <circle class="speedometer-hub" cx="75" cy="75" r="4" />
-            <text x="12" y="87">0</text>
-            <text x="128" y="87">190</text>
           </svg>
           <div class="speed-reading"><span id="speed">000</span><span class="speed-unit">KM/H</span></div>
         </div>
         <div class="lap-card">
           <div class="hud-label">LAP</div>
           <div class="lap-reading"><span id="lap">01</span><span class="lap-total">/ 03</span></div>
-          <div class="lap-caption">NEON CIRCUIT</div>
+          <div class="lap-caption">DOWNTOWN LOOP</div>
         </div>
         <div id="hill-progress-card" class="hill-progress-card" hidden>
           <div class="hud-label">CLIMB PROGRESS</div>
@@ -75,7 +70,7 @@
       <div id="ghost-label" class="ghost-label" hidden>GHOST RUN <span id="ghost-time">--:--.--</span></div>
       <div id="run-message" class="run-message" role="status" aria-live="polite" hidden></div>
 
-      <div id="track-caption" class="track-caption"><span class="caption-line"></span> <span id="track-name">NIGHT CIRCUIT</span> <span id="track-coordinate" class="caption-coordinate">35° 41' N — 139° 41' E</span></div>
+      <div id="track-caption" class="track-caption"><span class="caption-line"></span> <span id="track-name">DOWNTOWN CIRCUIT</span> <span id="track-coordinate" class="caption-coordinate">35° 41' N — 139° 41' E</span></div>
 
       <footer class="bottom-bar">
         <div class="controls">
@@ -89,9 +84,9 @@
       <section id="start-screen" class="start-screen" aria-labelledby="main-menu-title" aria-modal="true" role="dialog">
         <div class="start-panel">
           <section id="main-menu" class="menu-view main-menu-view" aria-labelledby="main-menu-title">
-            <div class="menu-eyebrow">SUN, SAND & OPEN ROADS</div>
-            <h1 id="main-menu-title">COAST <span>RALLY</span></h1>
-            <p class="menu-description">Find your line along the coast.</p>
+            <div class="menu-eyebrow">YOUR CITY. YOUR ROUTE.</div>
+            <h1 id="main-menu-title">METRO <span>DRIVE</span></h1>
+            <p class="menu-description">Find your line through the city.</p>
             <div class="main-menu-actions">
               <button id="play-button" class="start-button menu-button" type="button">PLAY <span>→</span></button>
               <button id="controls-button" class="secondary-button" type="button">CONTROLS</button>
@@ -131,22 +126,22 @@
             <button class="mode-card selected" type="button" data-mode="circuit" aria-pressed="true">
               <span class="mode-number">01 / CIRCUIT</span>
               <strong>CIRCUIT RACE</strong>
-              <span>Three laps around the coastal loop.</span>
+              <span>Three laps through the downtown streets.</span>
             </button>
             <button class="mode-card" type="button" data-mode="hill" aria-pressed="false">
               <span class="mode-number">02 / ASCENT</span>
               <strong>HILL CLIMB</strong>
-              <span>Take the winding road all the way to the summit.</span>
+              <span>Climb a winding pine-forest mountain road to a rocky viewpoint.</span>
             </button>
             <button class="mode-card" type="button" data-mode="ghost" aria-pressed="false">
               <span class="mode-number">03 / TIME TRIAL</span>
               <strong>GHOST RIDE</strong>
-              <span>Race your recorded best through a see-through replay.</span>
+              <span>Race the same figure-eight city track at sunset beside your translucent best run.</span>
             </button>
             <button class="mode-card" type="button" data-mode="checkpoint" aria-pressed="false">
               <span class="mode-number">04 / SURVIVAL</span>
               <strong>CHECKPOINT RUSH</strong>
-              <span>Reach each gate to add five seconds to the clock.</span>
+              <span>Race the desert-colored mountain pass and reach glowing gates for five more seconds.</span>
             </button>
             </div>
             <div class="menu-navigation">
@@ -157,34 +152,46 @@
           <section id="vehicle-select" class="menu-view" aria-labelledby="vehicle-title" hidden>
           <h2 id="vehicle-title" class="vehicle-prompt">CHOOSE YOUR RIDE</h2>
           <div class="vehicle-options" role="group" aria-label="Choose a vehicle">
-            <button class="vehicle-card sports-car" type="button" data-vehicle="sports" aria-pressed="false">
+            <button class="vehicle-card city-hatchback selected" type="button" data-vehicle="rally" aria-pressed="true">
               <span class="vehicle-art" aria-hidden="true"></span>
-              <span class="vehicle-category">01 / SPEED</span>
-              <strong class="vehicle-name">DUNE BUGGY</strong>
-              <span class="vehicle-description">Light, quick and happy on loose sand.</span>
-              <span class="vehicle-stats">
-                <span><span>TOP SPEED</span><strong>210 <small>KM/H</small></strong></span>
-                <span><span>HANDLING</span><strong>62 <small>/ 100</small></strong></span>
-                <span><span>WEIGHT</span><strong>1,280 <small>KG</small></strong></span>
-              </span>
-              <span class="vehicle-trait">LIGHT · QUICK · OPEN CAGE</span>
-            </button>
-            <button class="vehicle-card rally-car selected" type="button" data-vehicle="rally" aria-pressed="true">
-              <span class="vehicle-art" aria-hidden="true"></span>
-              <span class="vehicle-category">02 / ALL-ROUND</span>
-              <strong class="vehicle-name">RALLY JEEP</strong>
-              <span class="vehicle-description">Sure-footed traction for rough trails.</span>
+              <span class="vehicle-category">01 / CITY</span>
+              <strong class="vehicle-name">SMALL HATCHBACK</strong>
+              <span class="vehicle-description">Compact and nimble for the downtown streets.</span>
               <span class="vehicle-stats">
                 <span><span>TOP SPEED</span><strong>180 <small>KM/H</small></strong></span>
                 <span><span>HANDLING</span><strong>88 <small>/ 100</small></strong></span>
                 <span><span>WEIGHT</span><strong>1,460 <small>KG</small></strong></span>
               </span>
-              <span class="vehicle-trait">ALL-ROUND · STEADY CLIMBS</span>
+              <span class="vehicle-trait">COMPACT · AGILE · EVERYDAY</span>
+            </button>
+            <button class="vehicle-card taxi" type="button" data-vehicle="taxi" aria-pressed="false">
+              <span class="vehicle-art" aria-hidden="true"></span>
+              <span class="vehicle-category">02 / CITY</span>
+              <strong class="vehicle-name">YELLOW TAXI</strong>
+              <span class="vehicle-description">A familiar cab with a bright rooftop sign.</span>
+              <span class="vehicle-stats">
+                <span><span>TOP SPEED</span><strong>180 <small>KM/H</small></strong></span>
+                <span><span>HANDLING</span><strong>88 <small>/ 100</small></strong></span>
+                <span><span>WEIGHT</span><strong>1,460 <small>KG</small></strong></span>
+              </span>
+              <span class="vehicle-trait">CITY CAB · STEADY · SURE-FOOTED</span>
+            </button>
+            <button class="vehicle-card sports-car" type="button" data-vehicle="sports" aria-pressed="false">
+              <span class="vehicle-art" aria-hidden="true"></span>
+              <span class="vehicle-category">03 / SPORT</span>
+              <strong class="vehicle-name">SPORTS COUPE</strong>
+              <span class="vehicle-description">A low-slung two-door built for open roads.</span>
+              <span class="vehicle-stats">
+                <span><span>TOP SPEED</span><strong>210 <small>KM/H</small></strong></span>
+                <span><span>HANDLING</span><strong>62 <small>/ 100</small></strong></span>
+                <span><span>WEIGHT</span><strong>1,280 <small>KG</small></strong></span>
+              </span>
+              <span class="vehicle-trait">QUICK · LOW · REAR-WHEEL DRIVE</span>
             </button>
             <button class="vehicle-card truck" type="button" data-vehicle="truck" aria-pressed="false">
               <span class="vehicle-art" aria-hidden="true"></span>
-              <span class="vehicle-category">03 / MUSCLE</span>
-              <strong class="vehicle-name">BEACH PICKUP</strong>
+              <span class="vehicle-category">04 / UTILITY</span>
+              <strong class="vehicle-name">PICKUP TRUCK</strong>
               <span class="vehicle-description">Low gearing and plenty of hill-pulling torque.</span>
               <span class="vehicle-stats">
                 <span><span>TOP SPEED</span><strong>130 <small>KM/H</small></strong></span>
@@ -258,7 +265,10 @@
           <button id="finish-restart" class="finish-restart" type="button">RACE AGAIN <span>↻</span></button>
         </div>
       </section>
-      <div id="loading" class="loading"><span></span> PREPARING THE COAST</div>
+      <div id="loading" class="loading" role="status" aria-live="polite" hidden>
+        <span class="loading-pulse" aria-hidden="true"></span>
+        <span id="loading-label">PREPARING THE CITY</span>
+      </div>
     </main>
   </body>
 </html>

@@ -1,8 +1,10 @@
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 
 const container = document.querySelector("#game");
 const speedDisplay = document.querySelector("#speed");
 const loading = document.querySelector("#loading");
+const loadingLabel = document.querySelector("#loading-label");
 const countdownDisplay = document.querySelector("#countdown");
 const startScreen = document.querySelector("#start-screen");
 const startButton = document.querySelector("#start-button");
@@ -67,12 +69,15 @@ const finishBestLabel = document.querySelector("#finish-best-label");
 const finishCheckpoints = document.querySelector("#finish-checkpoints");
 const finishRestartText = document.querySelector("#finish-restart").firstChild;
 const modeCards = document.querySelectorAll(".mode-card");
-const circuitWorld = new THREE.Group();
-const hillWorld = new THREE.Group();
-
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x91cce3);
-scene.fog = new THREE.Fog(0xaed4df, 460, 1180);
+scene.background = new THREE.Color(0x8fb9d5);
+let environmentRoot = null;
+let environmentWorld = null;
+let activeTheme = null;
+let warmWhiteMaterial;
+let sidewalkMaterial;
+let curbMaterial;
+let checkpointGate = null;
 
 const camera = new THREE.PerspectiveCamera(57, window.innerWidth / window.innerHeight, 0.1, 1400);
 camera.position.set(0, 9, 15);
@@ -83,80 +88,8 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1;
 container.appendChild(renderer.domElement);
-
-scene.add(new THREE.HemisphereLight(0xd9f1ff, 0x9b815d, 1.8));
-const sunlight = new THREE.DirectionalLight(0xffe2ad, 2.1);
-sunlight.position.set(-120, 180, 100);
-sunlight.castShadow = true;
-sunlight.shadow.mapSize.set(2048, 2048);
-sunlight.shadow.camera.left = -180;
-sunlight.shadow.camera.right = 180;
-sunlight.shadow.camera.top = 180;
-sunlight.shadow.camera.bottom = -180;
-sunlight.shadow.bias = -0.00025;
-scene.add(sunlight);
-
-const cyan = new THREE.MeshStandardMaterial({
-  color: 0xc59b59,
-  roughness: 0.82,
-});
-const pink = new THREE.MeshStandardMaterial({
-  color: 0x946844,
-  roughness: 0.86,
-});
-const whiteGlow = new THREE.MeshStandardMaterial({
-  color: 0xf1e4c8,
-  roughness: 0.55,
-});
-
-const sandPixels = new Uint8Array(128 * 128 * 4);
-let sandSeed = 7429;
-for (let i = 0; i < 128 * 128; i += 1) {
-  sandSeed = (sandSeed * 16807) % 2147483647;
-  const grain = Math.floor(((sandSeed - 1) / 2147483646) * 28);
-  sandPixels[i * 4] = 205 + grain;
-  sandPixels[i * 4 + 1] = 178 + grain;
-  sandPixels[i * 4 + 2] = 128 + grain;
-  sandPixels[i * 4 + 3] = 255;
-}
-const sandTexture = new THREE.DataTexture(sandPixels, 128, 128, THREE.RGBAFormat);
-sandTexture.wrapS = THREE.RepeatWrapping;
-sandTexture.wrapT = THREE.RepeatWrapping;
-sandTexture.repeat.set(52, 52);
-sandTexture.colorSpace = THREE.SRGBColorSpace;
-sandTexture.needsUpdate = true;
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(1800, 1800),
-  new THREE.MeshStandardMaterial({ color: 0xd9c08e, map: sandTexture, roughness: 1 }),
-);
-ground.rotation.x = -Math.PI / 2;
-ground.position.y = -0.16;
-ground.receiveShadow = true;
-scene.add(ground);
-
-const shallowWater = new THREE.Mesh(
-  new THREE.PlaneGeometry(160, 1050),
-  new THREE.MeshStandardMaterial({ color: 0x67b9c2, roughness: 0.38, metalness: 0.04 }),
-);
-shallowWater.rotation.x = -Math.PI / 2;
-shallowWater.position.set(158, -0.55, -70);
-scene.add(shallowWater);
-const ocean = new THREE.Mesh(
-  new THREE.PlaneGeometry(1000, 1250),
-  new THREE.MeshStandardMaterial({ color: 0x398ea7, roughness: 0.34, metalness: 0.08 }),
-);
-ocean.rotation.x = -Math.PI / 2;
-ocean.position.set(690, -0.62, -70);
-scene.add(ocean);
-
-const grid = new THREE.GridHelper(500, 100, 0x17384d, 0x172135);
-grid.position.y = -0.145;
-grid.material.transparent = true;
-grid.material.opacity = 0.35;
-scene.add(grid);
-grid.visible = false;
 
 const centerX = 0;
 const centerZ = 0;
@@ -164,22 +97,197 @@ const radiusX = 62;
 const radiusZ = 40;
 const trackWidth = 16;
 const trackSamples = 320;
+const bridgeHeight = 8;
+const bridgeRampHalfAngle = 0.56;
+const lapCheckpointCount = 8;
+const checkpointSpacing = 45;
+
+const environmentThemes = {
+  circuit: {
+    sky: 0x70bdf0, fog: 0xb5d9e9, fogNear: 560, fogFar: 1450,
+    ground: 0x879477, road: 0x383e42, sidewalk: 0xb8b7ad, curb: 0xd2d0c6,
+    sunlight: 0xfff3dc, sunlightIntensity: 2.4, hemisphere: 0xe4f4ff, hemisphereGround: 0x78836c,
+    buildings: [0xd5c5a9, 0xb6bec0, 0xc59b83, 0xd7d2c7, 0x9eabb3, 0xc4b6a3],
+    windows: 0x718995, trees: [0x53754d, 0x6d895a], accent: 0xe8d477,
+  },
+  ghost: {
+    sky: 0xe8b487, fog: 0xf0d7b9, fogNear: 500, fogFar: 1330,
+    ground: 0x8a896d, road: 0x47413e, sidewalk: 0xc3b6a3, curb: 0xd2c4ae,
+    sunlight: 0xffd5a1, sunlightIntensity: 2.15, hemisphere: 0xffe7c7, hemisphereGround: 0x77745f,
+    buildings: [0xc58b6e, 0xd0b58d, 0x9d9990, 0xd8cbb2, 0xb27c67, 0xc6b29b],
+    windows: 0x82909a, trees: [0x66764e, 0x87905a], accent: 0xf1bd66,
+  },
+  checkpoint: {
+    sky: 0xf3bd7d, fog: 0xf4d2a4, fogNear: 600, fogFar: 1500,
+    ground: 0xc5a06b, road: 0x45403a, sidewalk: 0xd6bd91, curb: 0xe1cc9d,
+    sunlight: 0xffc078, sunlightIntensity: 2.25, hemisphere: 0xffe1b4, hemisphereGround: 0x8a5b3c,
+    buildings: [0xb77452, 0xd39a68, 0x985644, 0xc8875e, 0xe0b27b, 0xa65e49],
+    windows: 0x806351, trees: [0x244e3a, 0x315e43], accent: 0xffb12e,
+    rockColors: [0xa94c37, 0xc46b43],
+  },
+  hill: {
+    sky: 0x9bc9e3, fog: 0xcbd9d4, fogNear: 360, fogFar: 1120,
+    ground: 0x687754, road: 0x383e42, sidewalk: 0xb8b7ad, curb: 0xd2d0c6,
+    sunlight: 0xfff0d1, sunlightIntensity: 2.2, hemisphere: 0xe3f3ff, hemisphereGround: 0x65734f,
+    buildings: [0xd5c5a9, 0xb6bec0, 0xc59b83, 0xd7d2c7, 0x9eabb3, 0xc4b6a3],
+    windows: 0x718995, trees: [0x244e3a, 0x315e43], accent: 0xe8d477,
+  },
+};
+
+function createEnvironment(mode) {
+  if (environmentRoot) disposeEnvironment();
+  const theme = environmentThemes[mode];
+  if (!theme) throw new Error(`No environment is configured for mode "${mode}".`);
+
+  activeTheme = theme;
+  environmentRoot = new THREE.Group();
+  environmentWorld = new THREE.Group();
+  environmentRoot.add(environmentWorld);
+  scene.add(environmentRoot);
+  scene.background = new THREE.Color(theme.sky);
+  scene.fog = new THREE.Fog(theme.fog, theme.fogNear, theme.fogFar);
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(1800, 1800),
+    new THREE.MeshStandardMaterial({ color: theme.ground, roughness: 1 }),
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.16;
+  ground.receiveShadow = true;
+  environmentRoot.add(ground);
+  environmentRoot.add(new THREE.HemisphereLight(theme.hemisphere, theme.hemisphereGround, 1.55));
+
+  const sunlight = new THREE.DirectionalLight(theme.sunlight, theme.sunlightIntensity);
+  sunlight.position.set(-120, 180, 100);
+  sunlight.castShadow = true;
+  sunlight.shadow.mapSize.set(1024, 1024);
+  sunlight.shadow.camera.left = -180;
+  sunlight.shadow.camera.right = 180;
+  sunlight.shadow.camera.top = 180;
+  sunlight.shadow.camera.bottom = -180;
+  sunlight.shadow.bias = -0.00025;
+  environmentRoot.add(sunlight);
+  warmWhiteMaterial = new THREE.MeshStandardMaterial({ color: 0xf4eee0, roughness: 0.72 });
+  sidewalkMaterial = new THREE.MeshStandardMaterial({ color: theme.sidewalk, roughness: 0.96 });
+  curbMaterial = new THREE.MeshStandardMaterial({ color: theme.curb, roughness: 0.9 });
+
+  if (mode === "hill" || mode === "checkpoint") {
+    buildHillClimb();
+  } else {
+    makeRoad();
+    addCityScenery();
+  }
+  addEnvironmentClouds(mode);
+  if (mode === "hill" || mode === "checkpoint") addMountainFog(mode);
+  if (mode === "checkpoint") createCheckpointGate();
+}
+
+function disposeObjectResources(root) {
+  const geometries = new Set();
+  const materials = new Set();
+  root.traverse((object) => {
+    if (object.isLight && object.shadow) object.shadow.dispose();
+    if (object.geometry) geometries.add(object.geometry);
+    if (Array.isArray(object.material)) object.material.forEach((material) => materials.add(material));
+    else if (object.material) materials.add(object.material);
+  });
+  geometries.forEach((geometry) => geometry.dispose());
+  materials.forEach((material) => material.dispose());
+}
+
+function disposeEnvironment() {
+  if (environmentRoot) {
+    scene.remove(environmentRoot);
+    disposeObjectResources(environmentRoot);
+    environmentRoot.clear();
+  }
+  environmentRoot = null;
+  environmentWorld = null;
+  activeTheme = null;
+  warmWhiteMaterial = null;
+  sidewalkMaterial = null;
+  curbMaterial = null;
+  checkpointGate = null;
+  scene.background = new THREE.Color(0x8fb9d5);
+  scene.fog = null;
+}
+
+function trackElevation(angle) {
+  const wrapped = Math.atan2(Math.sin(angle), Math.cos(angle));
+  if (Math.abs(wrapped) >= bridgeRampHalfAngle) return 0;
+  const ramp = Math.cos((wrapped / bridgeRampHalfAngle) * Math.PI / 2);
+  return bridgeHeight * ramp * ramp;
+}
+
+function trackTangent(angle) {
+  return new THREE.Vector3(
+    radiusX * Math.cos(angle),
+    0,
+    2 * radiusZ * Math.cos(2 * angle),
+  );
+}
 
 function makeOvalPoint(angle, offset = 0, y = 0) {
-  const cosine = Math.cos(angle);
-  const sine = Math.sin(angle);
-  const baseX = radiusX * cosine;
-  const baseZ = radiusZ * sine;
-  let normalX = cosine / radiusX;
-  let normalZ = sine / radiusZ;
-  const normalLength = Math.hypot(normalX, normalZ);
-  normalX /= normalLength;
-  normalZ /= normalLength;
+  const tangent = trackTangent(angle);
+  const normalX = -tangent.z / Math.hypot(tangent.x, tangent.z);
+  const normalZ = tangent.x / Math.hypot(tangent.x, tangent.z);
   return new THREE.Vector3(
-    centerX + baseX + normalX * offset,
-    y,
-    centerZ + baseZ + normalZ * offset,
+    centerX + radiusX * Math.sin(angle) + normalX * offset,
+    y + trackElevation(angle),
+    centerZ + radiusZ * Math.sin(2 * angle) + normalZ * offset,
   );
+}
+
+function findNearestTrackAngle(x, z, referenceY) {
+  let bestAngle = 0;
+  let bestScore = Infinity;
+  const step = (Math.PI * 2) / trackSamples;
+  for (let i = 0; i < trackSamples; i += 1) {
+    const angle = i * step;
+    const pointX = centerX + radiusX * Math.sin(angle);
+    const pointZ = centerZ + radiusZ * Math.sin(2 * angle);
+    const heightDelta = trackElevation(angle) - referenceY;
+    const score = (pointX - x) ** 2 + (pointZ - z) ** 2 + heightDelta ** 2 * 4;
+    if (score < bestScore) {
+      bestScore = score;
+      bestAngle = angle;
+    }
+  }
+  const coarseAngle = bestAngle;
+  for (let i = -8; i <= 8; i += 1) {
+    const angle = coarseAngle + (i * step) / 8;
+    const pointX = centerX + radiusX * Math.sin(angle);
+    const pointZ = centerZ + radiusZ * Math.sin(2 * angle);
+    const heightDelta = trackElevation(angle) - referenceY;
+    const score = (pointX - x) ** 2 + (pointZ - z) ** 2 + heightDelta ** 2 * 4;
+    if (score < bestScore) {
+      bestScore = score;
+      bestAngle = angle;
+    }
+  }
+  return bestAngle;
+}
+
+function makeOvalRibbon(innerOffset, outerOffset, y, material, target) {
+  const positions = [];
+  const indices = [];
+  for (let i = 0; i <= trackSamples; i += 1) {
+    const angle = (i / trackSamples) * Math.PI * 2;
+    const inner = makeOvalPoint(angle, innerOffset, y);
+    const outer = makeOvalPoint(angle, outerOffset, y);
+    positions.push(inner.x, inner.y, inner.z, outer.x, outer.y, outer.z);
+    if (i < trackSamples) {
+      const a = i * 2;
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const ribbon = new THREE.Mesh(geometry, material);
+  ribbon.receiveShadow = true;
+  target.add(ribbon);
 }
 
 function makeRoad() {
@@ -210,13 +318,16 @@ function makeRoad() {
   const road = new THREE.Mesh(
     geometry,
     new THREE.MeshStandardMaterial({
-      color: 0x806648,
+      color: activeTheme.road,
       roughness: 0.96,
       side: THREE.DoubleSide,
     }),
   );
   road.receiveShadow = true;
-  circuitWorld.add(road);
+  environmentWorld.add(road);
+
+  makeOvalRibbon(-trackWidth / 2 - 5.5, -trackWidth / 2 - 0.8, -0.08, sidewalkMaterial, environmentWorld);
+  makeOvalRibbon(trackWidth / 2 + 0.8, trackWidth / 2 + 5.5, -0.08, sidewalkMaterial, environmentWorld);
 
   for (const offset of [-trackWidth / 2, trackWidth / 2]) {
     const points = [];
@@ -224,129 +335,374 @@ function makeRoad() {
       points.push(makeOvalPoint((i / trackSamples) * Math.PI * 2, offset, 0.025));
     }
     const edge = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), trackSamples, 0.105, 6, false),
-      offset < 0 ? pink : cyan,
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), trackSamples, 0.16, 6, false),
+      curbMaterial,
     );
-    circuitWorld.add(edge);
+    environmentWorld.add(edge);
   }
 
   const dashMaterial = new THREE.MeshStandardMaterial({
-    color: 0xd9c49b,
+    color: activeTheme.accent,
     roughness: 0.85,
   });
-  for (let i = 0; i < 80; i += 1) {
-    const angle = (i / 80) * Math.PI * 2;
-    const marker = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.025, 1.05), dashMaterial);
+  for (let i = 0; i < 96; i += 1) {
+    const angle = (i / 96) * Math.PI * 2;
+    const marker = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.025, 2), dashMaterial);
     marker.position.copy(makeOvalPoint(angle, 0, 0.005));
-    const tangentX = -radiusX * Math.sin(angle);
-    const tangentZ = radiusZ * Math.cos(angle);
+    const tangent = trackTangent(angle);
+    const tangentX = tangent.x;
+    const tangentZ = tangent.z;
     marker.rotation.y = Math.atan2(tangentX, tangentZ);
-    circuitWorld.add(marker);
+    environmentWorld.add(marker);
   }
 
   const startLine = new THREE.Mesh(
     new THREE.BoxGeometry(trackWidth - 0.25, 0.04, 0.8),
     new THREE.MeshStandardMaterial({ color: 0xf4e8cd, roughness: 0.72 }),
   );
-  startLine.position.copy(makeOvalPoint(-Math.PI / 2, 0, 0.02));
-  startLine.rotation.y = Math.PI / 2;
-  circuitWorld.add(startLine);
-}
+  startLine.position.copy(makeOvalPoint(startAngle, 0, 0.02));
+  const startTangent = trackTangent(startAngle);
+  startLine.rotation.y = Math.atan2(-startTangent.x, -startTangent.z);
+  environmentWorld.add(startLine);
 
-makeRoad();
+  const lapGateMaterial = new THREE.MeshStandardMaterial({
+    color: activeTheme.accent,
+    emissive: activeTheme.accent,
+    emissiveIntensity: 0.24,
+    roughness: 0.58,
+  });
+  const lapGatePosts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.38, 3.2, 0.42), lapGateMaterial, lapCheckpointCount * 2);
+  const lapGateBeams = new THREE.InstancedMesh(new THREE.BoxGeometry(trackWidth - 0.5, 0.38, 0.42), lapGateMaterial, lapCheckpointCount - 1);
+  const gateTransform = new THREE.Object3D();
+  for (let gate = 1; gate < lapCheckpointCount; gate += 1) {
+    const angle = startAngle + (Math.PI * 2 * gate) / lapCheckpointCount;
+    const center = makeOvalPoint(angle);
+    const tangent = trackTangent(angle);
+    const yaw = Math.atan2(-tangent.x, -tangent.z);
+    for (const side of [-1, 1]) {
+      gateTransform.position.copy(center);
+      gateTransform.position.x += Math.cos(yaw) * side * (trackWidth / 2 - 0.5);
+      gateTransform.position.y += 1.6;
+      gateTransform.position.z -= Math.sin(yaw) * side * (trackWidth / 2 - 0.5);
+      gateTransform.rotation.set(0, yaw, 0);
+      gateTransform.scale.set(1, 1, 1);
+      gateTransform.updateMatrix();
+      lapGatePosts.setMatrixAt((gate - 1) * 2 + (side === 1 ? 1 : 0), gateTransform.matrix);
+    }
+    gateTransform.position.copy(center);
+    gateTransform.position.y += 3.3;
+    gateTransform.rotation.set(0, yaw, 0);
+    gateTransform.updateMatrix();
+    lapGateBeams.setMatrixAt(gate - 1, gateTransform.matrix);
+  }
+  lapGatePosts.instanceMatrix.needsUpdate = true;
+  lapGateBeams.instanceMatrix.needsUpdate = true;
+  environmentWorld.add(lapGatePosts, lapGateBeams);
 
-function addTracksidePylons() {
-  const postGeometry = new THREE.CylinderGeometry(0.12, 0.17, 1.2, 8);
-  const capGeometry = new THREE.SphereGeometry(0.13, 8, 6);
-  for (let i = 0; i < 56; i += 1) {
-    const angle = (i / 56) * Math.PI * 2;
-    const outside = i % 2 === 0 ? 1 : -1;
-    const post = new THREE.Mesh(postGeometry, i % 2 === 0 ? cyan : pink);
-    post.position.copy(makeOvalPoint(angle, outside * (trackWidth / 2 + 2.2), 0.58));
-    post.castShadow = true;
-    circuitWorld.add(post);
-    const cap = new THREE.Mesh(capGeometry, i % 2 === 0 ? whiteGlow : pink);
-    cap.position.copy(post.position);
-    cap.position.y += 0.65;
-    circuitWorld.add(cap);
+  const crosswalkMaterial = new THREE.MeshStandardMaterial({ color: 0xf2efe5, roughness: 0.9 });
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (i / 8) * Math.PI * 2;
+    const tangent = trackTangent(angle);
+    const tangentX = tangent.x;
+    const tangentZ = tangent.z;
+    const tangentLength = Math.hypot(tangentX, tangentZ);
+    const yaw = Math.atan2(tangentX, tangentZ);
+    for (let stripe = -4; stripe <= 4; stripe += 1) {
+      const crossing = new THREE.Mesh(new THREE.BoxGeometry(trackWidth - 1.5, 0.035, 0.85), crosswalkMaterial);
+      crossing.position.copy(makeOvalPoint(angle, 0, 0.02));
+      crossing.position.x += (tangentX / tangentLength) * stripe * 1.25;
+      crossing.position.z += (tangentZ / tangentLength) * stripe * 1.25;
+      crossing.rotation.y = yaw;
+      environmentWorld.add(crossing);
+    }
   }
 }
 
-addTracksidePylons();
-
-function addCoastScenery() {
+function addCityScenery() {
   let seed = 48271;
   const random = () => {
     seed = (seed * 16807) % 2147483647;
     return (seed - 1) / 2147483646;
   };
-  const scenery = new THREE.Group();
-  const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x735337, roughness: 0.95 });
-  const leafMaterials = [
-    new THREE.MeshStandardMaterial({ color: 0x476d43, roughness: 0.92, side: THREE.DoubleSide }),
-    new THREE.MeshStandardMaterial({ color: 0x63824c, roughness: 0.92, side: THREE.DoubleSide }),
-  ];
-  const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.42, 9, 8);
-  const leafGeometry = new THREE.SphereGeometry(1, 8, 6);
-  for (let i = 0; i < 38; i += 1) {
-    const z = -530 + i * 17 + random() * 10;
-    const x = 91 + random() * 38;
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.set(x, 4.25, z);
-    trunk.rotation.z = (random() - 0.5) * 0.18;
-    trunk.castShadow = true;
-    scenery.add(trunk);
-    const crown = new THREE.Vector3(x, 8.9, z);
-    for (let frond = 0; frond < 7; frond += 1) {
-      const angle = (frond / 7) * Math.PI * 2;
-      const leaf = new THREE.Mesh(leafGeometry, leafMaterials[frond % 2]);
-      leaf.position.set(crown.x + Math.cos(angle) * 2.2, crown.y - 0.2, crown.z + Math.sin(angle) * 2.2);
-      leaf.scale.set(0.55, 0.16, 2.8);
-      leaf.rotation.y = -angle;
-      leaf.rotation.z = -0.18;
-      leaf.castShadow = true;
-      scenery.add(leaf);
+  const buildingColors = activeTheme.buildings;
+  const buildings = new THREE.Group();
+  const buildingInstances = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88 }),
+    64,
+  );
+  buildingInstances.castShadow = true;
+  buildingInstances.receiveShadow = true;
+  const buildingTransform = new THREE.Object3D();
+  let buildingCount = 0;
+  const windowMaterial = new THREE.MeshStandardMaterial({ color: activeTheme.windows, roughness: 0.42, metalness: 0.16 });
+  const windowGeometry = new THREE.BoxGeometry(1.15, 1.25, 0.08);
+  const windowInstances = new THREE.InstancedMesh(windowGeometry, windowMaterial, 36000);
+  const dummy = new THREE.Object3D();
+  let windowCount = 0;
+
+  function addBuilding(angle, side, offset, width, depth, height) {
+    const point = makeOvalPoint(angle, side * offset, 0);
+    const tangent = trackTangent(angle);
+    const yaw = Math.atan2(-tangent.x, -tangent.z);
+    const color = buildingColors[Math.floor(random() * buildingColors.length)];
+    buildingTransform.position.set(point.x, point.y + height / 2 - 0.13, point.z);
+    buildingTransform.rotation.set(0, yaw, 0);
+    buildingTransform.scale.set(width, height, depth);
+    buildingTransform.updateMatrix();
+    buildingInstances.setMatrixAt(buildingCount, buildingTransform.matrix);
+    buildingInstances.setColorAt(buildingCount, new THREE.Color(color));
+    buildingCount += 1;
+
+    for (const facade of [-1, 1]) {
+      for (let floor = 1; floor < Math.floor(height / 4); floor += 1) {
+        for (let column = 0; column < Math.floor(width / 2.7); column += 1) {
+          dummy.position.set(
+            point.x + Math.cos(yaw) * (column * 2.65 - width / 2 + 1.7) + Math.sin(yaw) * facade * (depth / 2 + 0.045),
+            point.y + floor * 3.3,
+            point.z - Math.sin(yaw) * (column * 2.65 - width / 2 + 1.7) + Math.cos(yaw) * facade * (depth / 2 + 0.045),
+          );
+          dummy.rotation.set(0, yaw, 0);
+          dummy.updateMatrix();
+          windowInstances.setMatrixAt(windowCount, dummy.matrix);
+          windowCount += 1;
+        }
+      }
+    }
+    for (const facade of [-1, 1]) {
+      for (let floor = 1; floor < Math.floor(height / 4); floor += 1) {
+        for (let column = 0; column < Math.floor(depth / 2.7); column += 1) {
+          const localZ = column * 2.65 - depth / 2 + 1.7;
+          const localX = facade * (width / 2 + 0.045);
+          dummy.position.set(
+            point.x + Math.cos(yaw) * localX + Math.sin(yaw) * localZ,
+            point.y + floor * 3.3,
+            point.z - Math.sin(yaw) * localX + Math.cos(yaw) * localZ,
+          );
+          dummy.rotation.set(0, yaw + facade * Math.PI / 2, 0);
+          dummy.updateMatrix();
+          windowInstances.setMatrixAt(windowCount, dummy.matrix);
+          windowCount += 1;
+        }
+      }
     }
   }
 
-  const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x8e8573, roughness: 1, flatShading: true });
-  for (let i = 0; i < 115; i += 1) {
-    const angle = random() * Math.PI * 2;
-    const distance = 82 + random() * 100;
-    const size = 0.8 + random() * 2.5;
-    const rock = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(size, 0),
-      rockMaterial,
-    );
-    rock.position.set(Math.cos(angle) * distance, size * 0.38, Math.sin(angle) * distance);
-    rock.rotation.set(random(), random() * Math.PI, random());
-    rock.scale.y = 0.55 + random() * 0.55;
-    rock.castShadow = true;
-    scenery.add(rock);
+  for (let i = 0; i < 44; i += 1) {
+    const angle = (i / 44) * Math.PI * 2 + (random() - 0.5) * 0.08;
+    const side = i % 2 === 0 ? 1 : -1;
+    addBuilding(angle, side, 24 + random() * 14, 12 + random() * 8, 12 + random() * 9, 24 + random() * 58);
   }
-  circuitWorld.add(scenery);
+  for (let i = 0; i < 20; i += 1) {
+    const angle = (i / 20) * Math.PI * 2 + 0.12;
+    const side = i % 2 === 0 ? -1 : 1;
+    addBuilding(angle, side, 35 + random() * 14, 13 + random() * 10, 14 + random() * 8, 13 + random() * 26);
+  }
+  buildingInstances.count = buildingCount;
+  buildingInstances.instanceMatrix.needsUpdate = true;
+  buildingInstances.instanceColor.needsUpdate = true;
+  buildings.add(buildingInstances);
+  windowInstances.count = windowCount;
+  windowInstances.instanceMatrix.needsUpdate = true;
+  windowInstances.castShadow = false;
+  buildings.add(windowInstances);
+  environmentWorld.add(buildings);
 
+  const treeTrunk = new THREE.MeshStandardMaterial({ color: 0x70513a, roughness: 0.95 });
+  const foliage = [
+    new THREE.MeshStandardMaterial({ color: activeTheme.trees[0], roughness: 0.96 }),
+    new THREE.MeshStandardMaterial({ color: activeTheme.trees[1], roughness: 0.96 }),
+  ];
+  const lampMetal = new THREE.MeshStandardMaterial({ color: 0x4b5457, roughness: 0.68, metalness: 0.42 });
+  const lampGlass = new THREE.MeshStandardMaterial({ color: 0xf4e8c5, roughness: 0.45 });
+  const trunkGeometry = new THREE.CylinderGeometry(0.22, 0.32, 4.8, 8);
+  const crownGeometry = new THREE.SphereGeometry(1, 16, 12);
+  const trunkInstances = new THREE.InstancedMesh(trunkGeometry, treeTrunk, 48);
+  const crownInstances = foliage.map((material) => new THREE.InstancedMesh(crownGeometry, material, 72));
+  const treeTransform = new THREE.Object3D();
+  const crownCounts = [0, 0];
+  let treeCount = 0;
+
+  function addTree(angle, side, offset) {
+    const point = makeOvalPoint(angle, side * offset, 0);
+    treeTransform.position.set(point.x, point.y + 2.35, point.z);
+    treeTransform.rotation.set(0, 0, 0);
+    treeTransform.scale.set(1, 1, 1);
+    treeTransform.updateMatrix();
+    trunkInstances.setMatrixAt(treeCount, treeTransform.matrix);
+    treeCount += 1;
+    for (let i = 0; i < 3; i += 1) {
+      const materialIndex = i % foliage.length;
+      treeTransform.position.set(
+        point.x + (random() - 0.5) * 1.2,
+        point.y + 4.7 + i * 0.75,
+        point.z + (random() - 0.5) * 1.2,
+      );
+      treeTransform.scale.set(2.1 + random() * 0.8, 1.9 + random() * 0.6, 2.1 + random() * 0.8);
+      treeTransform.updateMatrix();
+      crownInstances[materialIndex].setMatrixAt(crownCounts[materialIndex], treeTransform.matrix);
+      crownCounts[materialIndex] += 1;
+    }
+  }
+
+  function addStreetLamp(angle, side, offset) {
+    const point = makeOvalPoint(angle, side * offset, 0);
+    const lamp = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.19, 7.4, 8), lampMetal);
+    pole.position.y = 3.7;
+    pole.castShadow = true;
+    lamp.add(pole);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.8), lampMetal);
+    arm.position.set(0, 7.1, side * -0.7);
+    lamp.add(arm);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.18, 0.9), lampGlass);
+    head.position.set(0, 7.05, side * -1.4);
+    lamp.add(head);
+    lamp.position.set(point.x, point.y, point.z);
+    const tangent = trackTangent(angle);
+    lamp.rotation.y = Math.atan2(-tangent.x, -tangent.z);
+    environmentWorld.add(lamp);
+  }
+
+  function addTrafficSignal(angle, side) {
+    const point = makeOvalPoint(angle, side * 12.5, 0);
+    const signal = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 5.2, 8), lampMetal);
+    pole.position.y = 2.6;
+    pole.castShadow = true;
+    signal.add(pole);
+    const housing = new THREE.Mesh(
+      new THREE.BoxGeometry(0.72, 1.7, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0x343a3c, roughness: 0.75 }),
+    );
+    housing.position.set(0, 5.15, 0);
+    signal.add(housing);
+    const bulbColors = [0xb33e36, 0xd3a549, 0x648c58];
+    for (let i = 0; i < bulbColors.length; i += 1) {
+      const bulb = new THREE.Mesh(
+        new THREE.CircleGeometry(0.19, 12),
+        new THREE.MeshStandardMaterial({ color: bulbColors[i], roughness: 0.5 }),
+      );
+      bulb.position.set(0, 5.65 - i * 0.5, 0.26);
+      signal.add(bulb);
+    }
+    signal.position.set(point.x, point.y, point.z);
+    environmentWorld.add(signal);
+  }
+
+  for (let i = 0; i < 48; i += 1) {
+    const angle = (i / 48) * Math.PI * 2;
+    const side = i % 2 === 0 ? 1 : -1;
+    addTree(angle, side, 11 + (i % 3) * 1.25);
+    if (i % 2 === 0) addStreetLamp(angle, -side, 11.5);
+  }
+  trunkInstances.count = treeCount;
+  trunkInstances.instanceMatrix.needsUpdate = true;
+  trunkInstances.castShadow = true;
+  for (let i = 0; i < crownInstances.length; i += 1) {
+    crownInstances[i].count = crownCounts[i];
+    crownInstances[i].instanceMatrix.needsUpdate = true;
+    crownInstances[i].castShadow = true;
+  }
+  environmentWorld.add(trunkInstances, ...crownInstances);
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (i / 8) * Math.PI * 2;
+    addTrafficSignal(angle, -1);
+    addTrafficSignal(angle, 1);
+  }
+
+  const bridgeMaterial = new THREE.MeshStandardMaterial({ color: 0xa9aaa3, roughness: 0.88 });
+  const bridgeRailMaterial = new THREE.MeshStandardMaterial({ color: 0x596368, roughness: 0.65, metalness: 0.35 });
+  const bridgePositions = [];
+  const bridgeIndices = [];
+  const bridgeEdgePoints = [[], []];
+  const bridgeSamples = 56;
+  for (let i = 0; i <= bridgeSamples; i += 1) {
+    const angle = -bridgeRampHalfAngle + (2 * bridgeRampHalfAngle * i) / bridgeSamples;
+    const left = makeOvalPoint(angle, -trackWidth / 2 - 1, -0.55);
+    const right = makeOvalPoint(angle, trackWidth / 2 + 1, -0.55);
+    bridgePositions.push(left.x, left.y, left.z, right.x, right.y, right.z);
+    bridgeEdgePoints[0].push(makeOvalPoint(angle, -trackWidth / 2 - 1, 1.35));
+    bridgeEdgePoints[1].push(makeOvalPoint(angle, trackWidth / 2 + 1, 1.35));
+    if (i < bridgeSamples) {
+      const index = i * 2;
+      bridgeIndices.push(index, index + 1, index + 2, index + 1, index + 3, index + 2);
+    }
+  }
+  const bridgeGeometry = new THREE.BufferGeometry();
+  bridgeGeometry.setAttribute("position", new THREE.Float32BufferAttribute(bridgePositions, 3));
+  bridgeGeometry.setIndex(bridgeIndices);
+  bridgeGeometry.computeVertexNormals();
+  const bridgeDeck = new THREE.Mesh(bridgeGeometry, bridgeMaterial);
+  bridgeDeck.castShadow = true;
+  bridgeDeck.receiveShadow = true;
+  environmentWorld.add(bridgeDeck);
+  for (const points of bridgeEdgePoints) {
+    environmentWorld.add(new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), bridgeSamples, 0.22, 8, false),
+      bridgeRailMaterial,
+    ));
+  }
+  const supportGeometry = new THREE.BoxGeometry(1.5, bridgeHeight - 0.3, 1.5);
+  for (const x of [-10, 10]) {
+    const support = new THREE.Mesh(supportGeometry, bridgeMaterial);
+    support.position.set(x, (bridgeHeight - 0.3) / 2, 0);
+    support.castShadow = true;
+    environmentWorld.add(support);
+  }
+}
+
+function addEnvironmentClouds(mode) {
+  let seed = mode === "ghost" ? 58391 : mode === "hill" || mode === "checkpoint" ? 19087 : 48271;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
   const clouds = new THREE.Group();
-  const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f2e8, roughness: 1 });
-  for (let i = 0; i < 24; i += 1) {
-    const x = -320 + random() * 570;
-    const y = 52 + random() * 32;
-    const z = -550 + random() * 1050;
+  const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xfafcff, roughness: 1 });
+  const cloudCount = mode === "hill" ? 11 : 16;
+  for (let i = 0; i < cloudCount; i += 1) {
+    const x = -420 + random() * 840;
+    const y = 78 + random() * 38;
+    const z = -620 + random() * 1240;
     const cloud = new THREE.Group();
-    for (let puff = 0; puff < 4; puff += 1) {
-      const size = 4 + random() * 4;
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(size, 10, 8), cloudMaterial);
-      mesh.position.set(puff * size * 0.9, random() * size * 0.5, random() * size * 0.3);
+    const puffCount = 4 + Math.floor(random() * 3);
+    for (let puff = 0; puff < puffCount; puff += 1) {
+      const size = 9 + random() * 6;
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(size, 16, 10), cloudMaterial);
+      mesh.position.set(
+        (puff - (puffCount - 1) / 2) * size * 0.58,
+        random() * size * 0.16,
+        (random() - 0.5) * size * 0.35,
+      );
+      mesh.scale.set(1.35, 0.58, 0.9);
       cloud.add(mesh);
     }
     cloud.position.set(x, y, z);
     clouds.add(cloud);
   }
-  scene.add(clouds);
+  environmentRoot.add(clouds);
 }
 
-addCoastScenery();
-scene.add(circuitWorld);
+function addMountainFog(mode) {
+  const mistMaterial = new THREE.MeshBasicMaterial({
+    color: mode === "checkpoint" ? 0xffe1b6 : 0xdce8e7,
+    transparent: true,
+    opacity: 0.12,
+    depthWrite: false,
+  });
+  for (const [x, y, z, width] of [
+    [-54, 25, -92, 52],
+    [60, 42, -236, 64],
+    [-52, 62, -386, 58],
+    [8, 100, -486, 72],
+  ]) {
+    const mist = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), mistMaterial);
+    mist.position.set(x, y, z);
+    mist.scale.set(width, 4, width * 0.44);
+    environmentRoot.add(mist);
+  }
+}
 
 const hillCurve = new THREE.CatmullRomCurve3([
   new THREE.Vector3(0, 0, 0),
@@ -381,16 +737,13 @@ function buildHillClimb() {
   const indices = [];
   const leftEdge = [];
   const rightEdge = [];
-  const centerLine = [];
   for (let i = 0; i <= samples; i += 1) {
     const progress = (i / samples) * hillLength;
-    const center = hillRoadPoint(progress, 0, 0.02);
     const left = hillRoadPoint(progress, -hillRoadWidth / 2, 0.02);
     const right = hillRoadPoint(progress, hillRoadWidth / 2, 0.02);
     positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
     leftEdge.push(left);
     rightEdge.push(right);
-    centerLine.push(center);
     if (i < samples) {
       const a = i * 2;
       indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
@@ -402,45 +755,135 @@ function buildHillClimb() {
   roadGeometry.setIndex(indices);
   roadGeometry.computeVertexNormals();
   const road = new THREE.Mesh(roadGeometry, new THREE.MeshStandardMaterial({
-    color: 0x806648,
+    color: activeTheme.road,
     roughness: 0.97,
     side: THREE.DoubleSide,
   }));
   road.receiveShadow = true;
-  hillWorld.add(road);
+  environmentWorld.add(road);
 
-  const edgeMaterial = new THREE.MeshStandardMaterial({
-    color: 0x8c704d,
-    roughness: 0.9,
-  });
+  const edgeMaterial = curbMaterial;
   for (const points of [leftEdge, rightEdge]) {
-    hillWorld.add(new THREE.Mesh(
+    environmentWorld.add(new THREE.Mesh(
       new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), samples, 0.14, 6, false),
       edgeMaterial,
     ));
   }
   const markerMaterial = new THREE.MeshStandardMaterial({
-    color: 0xd4c097,
+    color: activeTheme.accent,
     roughness: 0.84,
   });
-  for (let i = 0; i < 130; i += 1) {
-    const progress = hillLength * (i + 0.5) / 130;
-    const marker = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.035, 2.1), markerMaterial);
+  for (let i = 0; i < 100; i += 1) {
+    const progress = hillLength * (i + 0.5) / 100;
+    const marker = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 2.3), markerMaterial);
     marker.position.copy(hillRoadPoint(progress, 0, 0.09));
     const tangent = hillCurve.getTangentAt(progress / hillLength);
     marker.rotation.y = Math.atan2(tangent.x, tangent.z);
-    hillWorld.add(marker);
+    environmentWorld.add(marker);
   }
 
-  const pylonGeometry = new THREE.CylinderGeometry(0.12, 0.16, 2.8, 8);
-  for (let i = 0; i <= 52; i += 1) {
-    const progress = hillLength * i / 52;
-    const side = i % 2 === 0 ? -1 : 1;
-    const post = new THREE.Mesh(pylonGeometry, side < 0 ? cyan : pink);
-    post.position.copy(hillRoadPoint(progress, side * (hillRoadWidth / 2 + 2.5), 1.4));
-    post.castShadow = true;
-    hillWorld.add(post);
+  let seed = 7919;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+
+  const railMaterial = new THREE.MeshStandardMaterial({ color: 0x59615e, roughness: 0.7, metalness: 0.24 });
+  const railPostGeometry = new THREE.BoxGeometry(0.18, 1.25, 0.18);
+  const railPostInstances = new THREE.InstancedMesh(railPostGeometry, railMaterial, 260);
+  const transform = new THREE.Object3D();
+  let railPostCount = 0;
+  for (const side of [-1, 1]) {
+    const railPoints = [];
+    for (let i = 0; i <= 180; i += 1) {
+      const progress = (i / 180) * hillLength;
+      const point = hillRoadPoint(progress, side * (hillRoadWidth / 2 + 1.35), 1.1);
+      railPoints.push(point);
+      if (i % 3 === 0) {
+        transform.position.copy(point);
+        transform.rotation.set(0, 0, 0);
+        transform.scale.set(1, 1, 1);
+        transform.updateMatrix();
+        railPostInstances.setMatrixAt(railPostCount, transform.matrix);
+        railPostCount += 1;
+      }
+    }
+    environmentWorld.add(new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(railPoints), 180, 0.12, 6, false),
+      railMaterial,
+    ));
+    const lowerRailPoints = railPoints.map((point) => point.clone().add(new THREE.Vector3(0, -0.45, 0)));
+    environmentWorld.add(new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lowerRailPoints), 180, 0.08, 6, false),
+      railMaterial,
+    ));
   }
+  railPostInstances.count = railPostCount;
+  railPostInstances.instanceMatrix.needsUpdate = true;
+  environmentWorld.add(railPostInstances);
+
+  const pineTrunks = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(0.18, 0.28, 4, 7),
+    new THREE.MeshStandardMaterial({ color: 0x574436, roughness: 0.96 }),
+    168,
+  );
+  const pineCrowns = [0, 1, 2].map(() => new THREE.InstancedMesh(
+    new THREE.ConeGeometry(1, 1, 7),
+    new THREE.MeshStandardMaterial({ color: activeTheme.trees[0], roughness: 0.97 }),
+    168,
+  ));
+  for (let i = 0; i < 168; i += 1) {
+    const fraction = random();
+    const side = random() < 0.5 ? -1 : 1;
+    const point = hillRoadPoint(fraction * hillLength, side * (20 + random() * 68), -1);
+    const scale = 0.8 + random() * 1.15;
+    transform.position.set(point.x, point.y + 2 * scale, point.z);
+    transform.rotation.set(0, random() * Math.PI * 2, 0);
+    transform.scale.set(scale, scale, scale);
+    transform.updateMatrix();
+    pineTrunks.setMatrixAt(i, transform.matrix);
+    for (let tier = 0; tier < pineCrowns.length; tier += 1) {
+      transform.position.set(point.x, point.y + (3.2 + tier * 1.25) * scale, point.z);
+      transform.scale.set(2.25 * scale, 4.4 * scale, 2.25 * scale);
+      transform.updateMatrix();
+      pineCrowns[tier].setMatrixAt(i, transform.matrix);
+    }
+  }
+  pineTrunks.instanceMatrix.needsUpdate = true;
+  pineTrunks.castShadow = true;
+  for (const crowns of pineCrowns) {
+    crowns.instanceMatrix.needsUpdate = true;
+    crowns.castShadow = true;
+  }
+  environmentWorld.add(pineTrunks, ...pineCrowns);
+
+  const rockColors = activeTheme.rockColors || [0x77776f, 0x969187];
+  const rockInstances = rockColors.map((color) => new THREE.InstancedMesh(
+    new THREE.DodecahedronGeometry(1, 1),
+    new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true }),
+    100,
+  ));
+  const rockCounts = [0, 0];
+  for (let i = 0; i < 200; i += 1) {
+    const fraction = random();
+    const side = random() < 0.5 ? -1 : 1;
+    const point = hillRoadPoint(fraction * hillLength, side * (48 + random() * 120), -8);
+    const size = 7 + random() * 19;
+    transform.position.set(point.x, point.y + size * 0.42, point.z);
+    transform.rotation.set(random() * 0.5, random() * Math.PI, random() * 0.35);
+    transform.scale.set(size * (1.1 + random() * 0.8), size * (0.7 + random() * 0.5), size * (1 + random() * 0.7));
+    transform.updateMatrix();
+    const materialIndex = i % rockInstances.length;
+    rockInstances[materialIndex].setMatrixAt(rockCounts[materialIndex], transform.matrix);
+    rockCounts[materialIndex] += 1;
+  }
+  for (let i = 0; i < rockInstances.length; i += 1) {
+    rockInstances[i].count = rockCounts[i];
+    rockInstances[i].instanceMatrix.needsUpdate = true;
+    rockInstances[i].castShadow = true;
+    rockInstances[i].receiveShadow = true;
+  }
+  environmentWorld.add(...rockInstances);
 
   const finishProgress = hillLength;
   const finishLine = new THREE.Mesh(
@@ -450,19 +893,19 @@ function buildHillClimb() {
   finishLine.position.copy(hillRoadPoint(finishProgress, 0, 0.14));
   const finishTangent = hillCurve.getTangentAt(1);
   finishLine.rotation.y = Math.atan2(finishTangent.x, finishTangent.z);
-  hillWorld.add(finishLine);
+  environmentWorld.add(finishLine);
 
   const flagPosition = hillRoadPoint(finishProgress, hillRoadWidth / 2 + 1.5, 0);
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 9, 10), whiteGlow);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 9, 10), warmWhiteMaterial);
   pole.position.copy(flagPosition);
   pole.position.y += 4.5;
   pole.castShadow = true;
-  hillWorld.add(pole);
+  environmentWorld.add(pole);
   const flag = new THREE.Group();
   flag.position.set(flagPosition.x, flagPosition.y + 7.1, flagPosition.z);
   flag.rotation.y = Math.atan2(finishTangent.x, finishTangent.z);
   const flagMaterials = [
-    new THREE.MeshStandardMaterial({ color: 0xf4f7ff, emissive: 0x30394f, side: THREE.DoubleSide }),
+    new THREE.MeshStandardMaterial({ color: 0xf4f7ff, side: THREE.DoubleSide }),
     new THREE.MeshStandardMaterial({ color: 0x111727, side: THREE.DoubleSide }),
   ];
   for (let row = 0; row < 3; row += 1) {
@@ -472,199 +915,308 @@ function buildHillClimb() {
       flag.add(square);
     }
   }
-  hillWorld.add(flag);
+  environmentWorld.add(flag);
 
-  const mountainMaterial = new THREE.MeshStandardMaterial({
-    color: 0x82796a,
-    roughness: 1,
-    flatShading: true,
-  });
-  let seed = 7919;
-  const random = () => {
-    seed = (seed * 16807) % 2147483647;
-    return (seed - 1) / 2147483646;
-  };
-  for (let i = 0; i < 90; i += 1) {
-    const progress = hillLength * random();
-    const side = random() < 0.5 ? -1 : 1;
-    const position = hillRoadPoint(progress, side * (36 + random() * 95), -9);
-    const mountain = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(9 + random() * 20, 1),
-      mountainMaterial,
-    );
-    mountain.position.set(position.x, position.y + 7 + random() * 14, position.z);
-    mountain.rotation.y = random() * Math.PI;
-    mountain.scale.y = 0.8 + random() * 1.8;
-    hillWorld.add(mountain);
+  const summit = hillRoadPoint(hillLength, 0, 0.2);
+  const summitTangent = hillCurve.getTangentAt(1);
+  const summitYaw = Math.atan2(summitTangent.x, summitTangent.z);
+  const lookout = new THREE.Group();
+  const lookoutDeck = new THREE.Mesh(
+    new THREE.BoxGeometry(32, 0.5, 25),
+    new THREE.MeshStandardMaterial({ color: 0xb9b4a6, roughness: 0.9 }),
+  );
+  lookoutDeck.position.set(0, 0, -15);
+  lookoutDeck.receiveShadow = true;
+  lookout.add(lookoutDeck);
+  const overlookRailMaterial = new THREE.MeshStandardMaterial({ color: 0x626a68, roughness: 0.72, metalness: 0.2 });
+  for (const side of [-1, 1]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.3, 23), overlookRailMaterial);
+    rail.position.set(side * 15.4, 0.9, -15);
+    lookout.add(rail);
+    for (let post = 0; post <= 5; post += 1) {
+      const upright = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.25, 0.24), overlookRailMaterial);
+      upright.position.set(side * 15.4, 0.85, -25 + post * 4);
+      lookout.add(upright);
+    }
   }
+  const overlookFrontRail = new THREE.Mesh(new THREE.BoxGeometry(30.8, 1.3, 0.22), overlookRailMaterial);
+  overlookFrontRail.position.set(0, 0.9, -27.4);
+  lookout.add(overlookFrontRail);
+  const benchMaterial = new THREE.MeshStandardMaterial({ color: 0x826b50, roughness: 0.8 });
+  for (const x of [-9, 9]) {
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.22, 0.7), benchMaterial);
+    bench.position.set(x, 1, -9);
+    lookout.add(bench);
+    const seatSupports = new THREE.Mesh(new THREE.BoxGeometry(3, 0.65, 0.25), overlookRailMaterial);
+    seatSupports.position.set(x, 0.62, -9);
+    lookout.add(seatSupports);
+  }
+  lookout.position.set(summit.x, summit.y, summit.z);
+  lookout.rotation.y = summitYaw;
+  environmentWorld.add(lookout);
 }
 
-buildHillClimb();
-scene.add(hillWorld);
-hillWorld.visible = false;
-
-const checkpointGate = new THREE.Group();
-const checkpointMaterial = new THREE.MeshStandardMaterial({
-  color: 0xf1ddb1,
-  roughness: 0.68,
-});
-const checkpointPostGeometry = new THREE.BoxGeometry(0.35, 7, 0.45);
-for (const side of [-7.2, 7.2]) {
-  const post = new THREE.Mesh(checkpointPostGeometry, checkpointMaterial);
-  post.position.set(side, 3.5, 0);
-  checkpointGate.add(post);
+function createCheckpointGate() {
+  checkpointGate = new THREE.Group();
+  const checkpointMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffed73,
+    emissive: 0xffa900,
+    emissiveIntensity: 2.4,
+    roughness: 0.68,
+  });
+  const checkpointPostGeometry = new THREE.BoxGeometry(0.55, 9, 0.65);
+  for (const side of [-8.5, 8.5]) {
+    const post = new THREE.Mesh(checkpointPostGeometry, checkpointMaterial);
+    post.position.set(side, 4.5, 0);
+    checkpointGate.add(post);
+  }
+  const checkpointBeam = new THREE.Mesh(new THREE.BoxGeometry(18, 0.65, 0.65), checkpointMaterial);
+  checkpointBeam.position.y = 9;
+  checkpointGate.add(checkpointBeam);
+  environmentWorld.add(checkpointGate);
+  positionCheckpointGate();
 }
-const checkpointBeam = new THREE.Mesh(new THREE.BoxGeometry(14.8, 0.45, 0.5), checkpointMaterial);
-checkpointBeam.position.y = 7;
-checkpointGate.add(checkpointBeam);
-scene.add(checkpointGate);
-checkpointGate.visible = false;
 
 function createCar({
   bodyColor = 0x151c30,
-  topColor = 0x202844,
-  glassColor = 0x58d6f1,
-  frontMaterial = whiteGlow,
-  rearMaterial = pink,
-  leftHubMaterial = cyan,
-  rightHubMaterial = pink,
-  underglowColor = 0x05dfff,
-  vehicleType = "rally",
+  trimColor = 0x30383c,
+  glassColor = 0x56717d,
+  vehicleType = "hatchback",
 } = {}) {
   const car = new THREE.Group();
-  const bodyMaterial = new THREE.MeshStandardMaterial({
-    color: bodyColor,
-    metalness: 0.82,
-    roughness: 0.25,
-  });
-  const topMaterial = new THREE.MeshStandardMaterial({
-    color: topColor,
-    metalness: 0.72,
-    roughness: 0.21,
-  });
+  const specs = {
+    hatchback: { width: 1.82, length: 4.05, cabinHeight: 1.52, roofLength: 1.38, wheelbase: 2.58 },
+    taxi: { width: 1.84, length: 4.18, cabinHeight: 1.53, roofLength: 1.43, wheelbase: 2.62 },
+    coupe: { width: 1.9, length: 4.48, cabinHeight: 1.31, roofLength: 0.96, wheelbase: 2.72 },
+    truck: { width: 1.98, length: 5.12, cabinHeight: 1.58, roofLength: 1.28, wheelbase: 3.16 },
+  }[vehicleType] || { width: 1.82, length: 4.05, cabinHeight: 1.52, roofLength: 1.38, wheelbase: 2.58 };
+  const isTruck = vehicleType === "truck";
+  const isCoupe = vehicleType === "coupe";
+  const isTaxi = vehicleType === "taxi";
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color: bodyColor, metalness: 0.18, roughness: 0.34 });
+  const trimMaterial = new THREE.MeshStandardMaterial({ color: trimColor, metalness: 0.16, roughness: 0.48 });
   const glassMaterial = new THREE.MeshStandardMaterial({
     color: glassColor,
-    emissive: glassColor,
-    emissiveIntensity: 0.85,
-    metalness: 0.65,
-    roughness: 0.16,
+    metalness: 0.12,
+    roughness: 0.24,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+    side: THREE.DoubleSide,
   });
-  const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x080a12, roughness: 0.72, metalness: 0.24 });
+  const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x202326, roughness: 0.86 });
+  const rimMaterial = new THREE.MeshStandardMaterial({ color: 0xb8bec0, metalness: 0.72, roughness: 0.3 });
+  const lightMaterial = new THREE.MeshStandardMaterial({ color: 0xfff1cf, roughness: 0.28 });
+  const brakeLightMaterial = new THREE.MeshStandardMaterial({ color: 0xb52d28, roughness: 0.38 });
+  const interiorMaterial = new THREE.MeshStandardMaterial({ color: 0x272a28, roughness: 0.88 });
+  const bodyWidth = specs.width;
+  const frontZ = -specs.length / 2;
+  const rearZ = specs.length / 2;
+  const frontWheelZ = -specs.wheelbase / 2;
+  const rearWheelZ = specs.wheelbase / 2;
+  const roofY = specs.cabinHeight;
+  const roofZ = isTruck ? -0.18 : 0.18;
+  const cabinFrontZ = isTruck ? -0.94 : isCoupe ? -1.02 : -0.91;
+  const cabinRearZ = isTruck ? 0.67 : isCoupe ? 0.81 : 1.07;
+  const lowerGlassY = isCoupe ? 1.06 : 1.12;
+  const windowInset = bodyWidth * 0.46;
 
-  const chassisSize = vehicleType === "truck" ? [2.7, 0.9, 4.65] : vehicleType === "sports" ? [2.25, 0.5, 4.7] : [2.25, 0.62, 4.25];
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(...chassisSize), bodyMaterial);
-  chassis.position.y = vehicleType === "truck" ? 0.8 : 0.68;
-  chassis.castShadow = true;
-  car.add(chassis);
+  function addBox(parent, size, position, material, castShadow = false, cornerRadius = 0.04) {
+    const radius = Math.min(cornerRadius, ...size.map((dimension) => dimension * 0.45));
+    const geometry = new RoundedBoxGeometry(...size, 3, radius);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(...position);
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  }
 
-  const hoodSize = vehicleType === "truck" ? [2.3, 0.24, 1.65] : vehicleType === "sports" ? [1.98, 0.16, 1.5] : [1.92, 0.19, 1.15];
-  const hood = new THREE.Mesh(new THREE.BoxGeometry(...hoodSize), topMaterial);
-  hood.position.set(0, vehicleType === "truck" ? 1.28 : 0.98, -1.25);
-  hood.castShadow = true;
-  car.add(hood);
+  function addPane(vertices) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setIndex([0, 1, 2, 0, 2, 3]);
+    geometry.computeVertexNormals();
+    car.add(new THREE.Mesh(geometry, glassMaterial));
+  }
 
-  const cabinSize = vehicleType === "truck" ? [1.9, 0.9, 1.8] : vehicleType === "sports" ? [1.5, 0.48, 1.5] : [1.55, 0.68, 1.72];
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(...cabinSize), glassMaterial);
-  cabin.position.set(0, vehicleType === "truck" ? 1.55 : vehicleType === "sports" ? 1.13 : 1.24, vehicleType === "truck" ? -0.1 : 0.28);
-  cabin.castShadow = true;
-  car.add(cabin);
+  addBox(car, [bodyWidth, 0.48, specs.length * 0.84], [0, 0.67, 0.02], bodyMaterial, true, 0.12);
+  addBox(car, [bodyWidth * 0.98, 0.32, 1.12], [0, 0.91, frontZ * 0.63], bodyMaterial, true, 0.09);
+  if (!isTruck) {
+    addBox(car, [bodyWidth * 0.96, 0.32, 0.78], [0, 0.91, 1.48], bodyMaterial, true, 0.08);
+  }
+  addBox(car, [bodyWidth + 0.08, 0.16, 0.16], [0, 0.55, frontZ * 0.94], trimMaterial, false, 0.035);
+  addBox(car, [bodyWidth + 0.08, 0.16, 0.16], [0, 0.55, rearZ * 0.94], trimMaterial, false, 0.035);
+  addBox(car, [1.12, 0.17, 0.22], [0, isCoupe ? 0.93 : 1.02, cabinFrontZ + 0.2], interiorMaterial);
+  for (const x of [-0.43, 0.43]) {
+    addBox(car, [0.39, isCoupe ? 0.28 : 0.38, 0.34], [x, isCoupe ? 1.04 : 1.17, 0.34], interiorMaterial);
+    addBox(car, [0.4, 0.12, 0.4], [x, isCoupe ? 0.85 : 0.96, 0.28], interiorMaterial);
+  }
 
-  const roofSize = vehicleType === "truck" ? [1.78, 0.14, 1.28] : vehicleType === "sports" ? [1.35, 0.1, 0.24] : [1.43, 0.12, 0.98];
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(...roofSize), topMaterial);
-  roof.position.set(0, vehicleType === "truck" ? 2.02 : vehicleType === "sports" ? 1.39 : 1.63, vehicleType === "truck" ? -0.1 : 0.32);
-  car.add(roof);
+  if (isTruck) {
+    const bedLength = 1.45;
+    const bedZ = 1.56;
+    addBox(car, [1.5, 0.09, bedLength], [0, 1.015, bedZ], trimMaterial);
+    for (const side of [-1, 1]) {
+      addBox(car, [0.13, 0.44, bedLength], [side * 0.83, 1.17, bedZ], bodyMaterial, true);
+    }
+    addBox(car, [1.78, 0.4, 0.12], [0, 1.17, 2.25], bodyMaterial, true);
+    addBox(car, [1.94, 0.12, 0.13], [0, 1.38, 2.25], bodyMaterial);
+  }
 
-  const frontGlow = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.13, 0.08), frontMaterial);
-  frontGlow.position.set(0, 0.75, -2.15);
-  car.add(frontGlow);
-  const rearGlow = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.08), rearMaterial);
-  rearGlow.position.set(0, 0.78, 2.15);
-  car.add(rearGlow);
+  const roofWidth = isTruck ? 1.58 : isCoupe ? 1.55 : 1.52;
+  addBox(car, [roofWidth, 0.13, specs.roofLength], [0, roofY, roofZ], bodyMaterial, true, 0.065);
 
-  const wheelGeometry = new THREE.CylinderGeometry(0.43, 0.43, 0.3, 16);
-  for (const x of [-1.17, 1.17]) {
-    for (const z of [-1.35, 1.35]) {
-      const wheel = new THREE.Mesh(wheelGeometry, tireMaterial);
-      wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(x, 0.45, z);
-      wheel.castShadow = true;
-      car.add(wheel);
+  const windshieldBottomZ = cabinFrontZ - 0.16;
+  const windshieldTopZ = roofZ - specs.roofLength * 0.42;
+  addPane([
+    -windowInset, lowerGlassY, windshieldBottomZ,
+    windowInset, lowerGlassY, windshieldBottomZ,
+    windowInset * 0.83, roofY - 0.1, windshieldTopZ,
+    -windowInset * 0.83, roofY - 0.1, windshieldTopZ,
+  ]);
+  addPane([
+    windowInset, lowerGlassY, cabinRearZ,
+    -windowInset, lowerGlassY, cabinRearZ,
+    -windowInset * 0.8, roofY - 0.1, roofZ + specs.roofLength * 0.47,
+    windowInset * 0.8, roofY - 0.1, roofZ + specs.roofLength * 0.47,
+  ]);
 
-      const hub = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.2, 0.2, 0.315, 12),
-        x < 0 ? leftHubMaterial : rightHubMaterial,
-      );
-      hub.rotation.z = Math.PI / 2;
-      hub.position.copy(wheel.position);
-      car.add(hub);
+  for (const side of [-1, 1]) {
+    const pillarZ = roofZ + 0.04;
+    for (const [windowStart, windowEnd] of [[cabinFrontZ, pillarZ - 0.07], [pillarZ + 0.07, cabinRearZ]]) {
+      const roofStart = roofZ - specs.roofLength * 0.44;
+      const roofEnd = roofZ + specs.roofLength * 0.44;
+      const windowRoofStart = THREE.MathUtils.clamp(windowStart, roofStart, roofEnd);
+      const windowRoofEnd = THREE.MathUtils.clamp(windowEnd, roofStart, roofEnd);
+      addPane([
+        side * windowInset, lowerGlassY, windowStart,
+        side * windowInset, lowerGlassY, windowEnd,
+        side * windowInset * 0.92, roofY - 0.1, windowRoofEnd,
+        side * windowInset * 0.92, roofY - 0.1, windowRoofStart,
+      ]);
+    }
+    addBox(car, [0.12, roofY - lowerGlassY, 0.14], [side * windowInset * 0.96, (roofY + lowerGlassY) / 2, pillarZ], bodyMaterial, true);
+    for (const z of [frontWheelZ + 0.2, rearWheelZ - 0.2]) {
+      addBox(car, [0.1, 0.06, 0.14], [side * (bodyWidth / 2 + 0.03), 1.04, z], trimMaterial);
+    }
+    addBox(car, [0.16, 0.11, 0.25], [side * (bodyWidth / 2 + 0.12), 1.2, cabinFrontZ + 0.12], bodyMaterial, true);
+    addBox(car, [0.12, 0.09, 0.2], [side * (bodyWidth / 2 + 0.18), 1.22, cabinFrontZ + 0.12], trimMaterial);
+  }
+
+  for (const side of [-1, 1]) {
+    addBox(car, [0.38, 0.18, 0.1], [side * bodyWidth * 0.34, 0.86, frontZ * 0.96], lightMaterial);
+    addBox(car, [0.43, 0.22, 0.1], [side * bodyWidth * 0.36, 0.88, rearZ * 0.91], brakeLightMaterial);
+  }
+  addBox(car, [0.7, 0.23, 0.08], [0, 0.79, frontZ * 0.96], trimMaterial);
+  addBox(car, [0.78, 0.12, 0.08], [0, 0.66, frontZ * 0.97], trimMaterial);
+  addBox(car, [0.45, 0.11, 0.08], [0, 0.66, rearZ * 0.93], trimMaterial);
+
+  if (isTaxi) {
+    const signBase = addBox(car, [0.58, 0.12, 0.3], [0, roofY + 0.12, roofZ], new THREE.MeshStandardMaterial({ color: 0xf0c928, roughness: 0.38 }));
+    addBox(car, [0.48, 0.08, 0.2], [0, roofY + 0.21, roofZ], trimMaterial);
+    const taxiYellow = new THREE.MeshStandardMaterial({ color: 0xf0c928 });
+    for (const x of [-0.18, 0.18]) {
+      addBox(car, [0.12, 0.09, 0.22], [x, roofY + 0.21, roofZ], taxiYellow);
+    }
+    signBase.castShadow = true;
+  }
+
+  const wheelGeometry = new THREE.CylinderGeometry(0.38, 0.38, 0.27, 20);
+  const hubGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.29, 16);
+  car.userData.wheels = [];
+  for (const x of [-bodyWidth * 0.48, bodyWidth * 0.48]) {
+    for (const z of [frontWheelZ, rearWheelZ]) {
+      const wheelAssembly = new THREE.Group();
+      wheelAssembly.position.set(x, 0.43, z);
+      const tire = new THREE.Mesh(wheelGeometry, tireMaterial);
+      tire.rotation.z = Math.PI / 2;
+      tire.castShadow = true;
+      wheelAssembly.add(tire);
+      const rim = new THREE.Mesh(hubGeometry, rimMaterial);
+      rim.rotation.z = Math.PI / 2;
+      wheelAssembly.add(rim);
+      const spokeGeometry = new THREE.BoxGeometry(0.06, 0.06, 0.28);
+      for (let spoke = 0; spoke < 5; spoke += 1) {
+        const bar = new THREE.Mesh(spokeGeometry, rimMaterial);
+        bar.position.x = x < 0 ? -0.16 : 0.16;
+        bar.rotation.x = (spoke / 5) * Math.PI;
+        wheelAssembly.add(bar);
+      }
+      car.add(wheelAssembly);
+      car.userData.wheels.push({ assembly: wheelAssembly, front: z === frontWheelZ });
     }
   }
 
-  const underglow = new THREE.PointLight(underglowColor, 13, 9, 2);
-  underglow.position.set(0, 0.3, 0);
-  car.add(underglow);
-  car.position.set(0, 0, -radiusZ);
-  car.rotation.y = -Math.PI / 2;
+  car.position.copy(makeOvalPoint(startAngle));
+  const tangent = trackTangent(startAngle);
+  car.rotation.y = Math.atan2(-tangent.x, -tangent.z);
   scene.add(car);
   return car;
 }
 
+function animateCarWheels(vehicleCar, distance, steering = 0) {
+  for (const wheel of vehicleCar.userData.wheels || []) {
+    wheel.assembly.rotation.x += distance / 0.38;
+    wheel.assembly.rotation.y = wheel.front ? steering * 0.32 : 0;
+  }
+}
+
 const startAngle = -Math.PI / 2;
 const vehicleCatalog = {
-  sports: {
-    name: "Sports Car",
-    topSpeed: 210 / 3.6,
-    acceleration: 25,
-    handling: 0.62,
-    hillTraction: 0.28,
-    hillSpeedLimit: 16,
-    appearance: {
-      bodyColor: 0x8d1826,
-      topColor: 0xe43b4c,
-      glassColor: 0xffa2a8,
-      frontMaterial: whiteGlow,
-      rearMaterial: new THREE.MeshStandardMaterial({ color: 0xff5a64, emissive: 0xe31c37, emissiveIntensity: 2.8 }),
-      leftHubMaterial: new THREE.MeshStandardMaterial({ color: 0xff5a64, emissive: 0xe31c37, emissiveIntensity: 2.3 }),
-      rightHubMaterial: whiteGlow,
-      underglowColor: 0xff344e,
-      vehicleType: "sports",
-    },
-  },
   rally: {
-    name: "Rally Car",
+    name: "City Hatchback",
     topSpeed: 180 / 3.6,
     acceleration: 24,
     handling: 0.88,
     hillTraction: 0.48,
     hillSpeedLimit: 21,
     appearance: {
-      bodyColor: 0x142c38,
-      topColor: 0x1d5364,
-      glassColor: 0x61edff,
-      frontMaterial: whiteGlow,
-      rearMaterial: cyan,
-      leftHubMaterial: cyan,
-      rightHubMaterial: whiteGlow,
-      underglowColor: 0x16e6ff,
-      vehicleType: "rally",
+      bodyColor: 0x477457,
+      trimColor: 0x27332b,
+      glassColor: 0x6d8993,
+      vehicleType: "hatchback",
+    },
+  },
+  taxi: {
+    name: "Yellow Taxi",
+    topSpeed: 180 / 3.6,
+    acceleration: 24,
+    handling: 0.88,
+    hillTraction: 0.48,
+    hillSpeedLimit: 21,
+    appearance: {
+      bodyColor: 0xf0c928,
+      trimColor: 0x28352c,
+      glassColor: 0x526c75,
+      vehicleType: "taxi",
+    },
+  },
+  sports: {
+    name: "Sports Coupe",
+    topSpeed: 210 / 3.6,
+    acceleration: 25,
+    handling: 0.62,
+    hillTraction: 0.28,
+    hillSpeedLimit: 16,
+    appearance: {
+      bodyColor: 0xb93831,
+      trimColor: 0x252b30,
+      glassColor: 0x4d6671,
+      vehicleType: "coupe",
     },
   },
   truck: {
-    name: "Heavy Truck",
+    name: "Pickup Truck",
     topSpeed: 130 / 3.6,
     acceleration: 34,
     handling: 0.72,
     hillTraction: 0.82,
     hillSpeedLimit: 32,
     appearance: {
-      bodyColor: 0x76501a,
-      topColor: 0xd39327,
-      glassColor: 0xffdf8a,
-      frontMaterial: whiteGlow,
-      rearMaterial: new THREE.MeshStandardMaterial({ color: 0xffc857, emissive: 0xd88612, emissiveIntensity: 2.5 }),
-      leftHubMaterial: new THREE.MeshStandardMaterial({ color: 0xffc857, emissive: 0xd88612, emissiveIntensity: 2 }),
-      rightHubMaterial: whiteGlow,
-      underglowColor: 0xffb52e,
+      bodyColor: 0x547c91,
+      trimColor: 0x30363a,
+      glassColor: 0x526c75,
       vehicleType: "truck",
     },
   },
@@ -673,16 +1225,7 @@ let selectedVehicleId = "rally";
 let car = createCar(vehicleCatalog[selectedVehicleId].appearance);
 const opponents = [
   {
-    car: createCar({
-      bodyColor: 0x35162d,
-      topColor: 0x64224f,
-      glassColor: 0xff70ce,
-      frontMaterial: whiteGlow,
-      rearMaterial: pink,
-      leftHubMaterial: pink,
-      rightHubMaterial: whiteGlow,
-      underglowColor: 0xff2fae,
-    }),
+    car: createCar({ bodyColor: 0xd4ae32, trimColor: 0x25312a, glassColor: 0x526c75, vehicleType: "taxi" }),
     startProgress: -0.25,
     progress: -0.25,
     laneOffset: -4.5,
@@ -691,16 +1234,7 @@ const opponents = [
     finishTime: null,
   },
   {
-    car: createCar({
-      bodyColor: 0x142c38,
-      topColor: 0x1d5364,
-      glassColor: 0x61edff,
-      frontMaterial: whiteGlow,
-      rearMaterial: cyan,
-      leftHubMaterial: cyan,
-      rightHubMaterial: whiteGlow,
-      underglowColor: 0x16e6ff,
-    }),
+    car: createCar({ bodyColor: 0x48788b, trimColor: 0x283238, glassColor: 0x526c75, vehicleType: "hatchback" }),
     startProgress: -0.52,
     progress: -0.52,
     laneOffset: 4.5,
@@ -709,21 +1243,7 @@ const opponents = [
     finishTime: null,
   },
   {
-    car: createCar({
-      bodyColor: 0x241936,
-      topColor: 0x48306a,
-      glassColor: 0xbba0ff,
-      frontMaterial: whiteGlow,
-      rearMaterial: new THREE.MeshStandardMaterial({
-        color: 0x9b72ff,
-        emissive: 0x6429ff,
-        emissiveIntensity: 2.1,
-        roughness: 0.35,
-      }),
-      leftHubMaterial: whiteGlow,
-      rightHubMaterial: pink,
-      underglowColor: 0x9155ff,
-    }),
+    car: createCar({ bodyColor: 0x9b3930, trimColor: 0x292d30, glassColor: 0x526c75, vehicleType: "coupe" }),
     startProgress: -0.79,
     progress: -0.79,
     laneOffset: 0,
@@ -735,21 +1255,27 @@ const opponents = [
 
 const clock = new THREE.Clock();
 const keys = new Set();
-const carState = { speed: 0, heading: -Math.PI / 2 };
+const startTangent = trackTangent(startAngle);
+const carState = {
+  speed: 0,
+  heading: Math.atan2(-startTangent.x, -startTangent.z),
+};
 let audioContext;
 let engineOscillator;
 let engineHarmonic;
 let engineGain;
 let engineHarmonicGain;
+let tireGain;
+let cityAmbienceGain;
 const cameraTarget = new THREE.Vector3();
 const cameraDesired = new THREE.Vector3();
 const forward = new THREE.Vector3();
 const lapDisplay = document.querySelector("#lap");
 const positionDisplay = document.querySelector("#position");
 const vehicleCards = document.querySelectorAll(".vehicle-card");
-let previousLapAngle = -Math.PI / 2;
 let currentLap = 1;
 let totalAngle = 0;
+let nextLapCheckpoint = 1;
 let raceState = "ready";
 let pausedRaceState = "racing";
 let countdownRemaining = 3;
@@ -764,17 +1290,25 @@ let hillProgress = 0;
 let hillLaneOffset = 0;
 let checkpointCount = 0;
 let checkpointTimer = 20;
-let checkpointTarget = 0.28;
+let checkpointTarget = checkpointSpacing;
 let activeGhostRecord = null;
 let ghostCar = null;
 let runPath = [];
 let pathSampleRemaining = 0;
 
 function positionCheckpointGate() {
+  if (!checkpointGate) return;
+  if (gameMode === "checkpoint") {
+    const progress = Math.min(checkpointTarget, hillLength);
+    const tangent = hillCurve.getTangentAt(progress / hillLength);
+    checkpointGate.position.copy(hillRoadPoint(progress));
+    checkpointGate.rotation.y = Math.atan2(-tangent.x, -tangent.z);
+    return;
+  }
   const angle = startAngle + checkpointTarget;
-  checkpointGate.position.copy(makeOvalPoint(angle, 0, 0));
-  checkpointGate.position.y = 0;
-  checkpointGate.rotation.y = Math.atan2(-radiusX * Math.sin(angle), radiusZ * Math.cos(angle));
+  const tangent = trackTangent(angle);
+  checkpointGate.position.copy(makeOvalPoint(angle));
+  checkpointGate.rotation.y = Math.atan2(-tangent.x, -tangent.z);
 }
 
 function setGhostLabel(record) {
@@ -788,15 +1322,16 @@ function setGhostLabel(record) {
 }
 
 function setCarAtStart() {
-  if (gameMode === "hill") {
+  if (gameMode === "hill" || gameMode === "checkpoint") {
     const tangent = hillCurve.getTangentAt(0);
     car.position.copy(hillRoadPoint(0, hillLaneOffset));
     carState.heading = Math.atan2(-tangent.x, -tangent.z);
     car.rotation.set(Math.asin(THREE.MathUtils.clamp(tangent.y, -1, 1)), carState.heading, 0);
     return;
   }
-  car.position.set(0, 0, -radiusZ);
-  carState.heading = -Math.PI / 2;
+  car.position.copy(makeOvalPoint(startAngle));
+  const tangent = trackTangent(startAngle);
+  carState.heading = Math.atan2(-tangent.x, -tangent.z);
   car.rotation.set(0, carState.heading, 0);
 }
 
@@ -806,28 +1341,24 @@ function setGameMode(mode) {
   const climbing = mode === "hill";
   const checkpointRush = mode === "checkpoint";
   const ghostRide = mode === "ghost";
-  circuitWorld.visible = !climbing;
-  hillWorld.visible = climbing;
-  grid.visible = !climbing;
   for (const opponent of opponents) opponent.car.visible = !climbing && !ghostRide && !checkpointRush;
   lapCard.hidden = climbing || checkpointRush;
   positionCard.hidden = climbing || checkpointRush || ghostRide;
   hillProgressCard.hidden = !climbing;
   checkpointCard.hidden = !checkpointRush;
-  checkpointGate.visible = checkpointRush;
   modeStatus.textContent = climbing ? "HILL CLIMB" : ghostRide ? "GHOST RIDE" : checkpointRush ? "CHECKPOINT RUSH" : "CIRCUIT RACE";
   trackStatus.textContent = climbing ? "SUMMIT RUN" : checkpointRush ? "TIME ATTACK" : ghostRide ? "PERSONAL BEST" : "TRACK 01";
-  trackName.textContent = climbing ? "MOUNTAIN ASCENT" : checkpointRush ? "CHECKPOINT COURSE" : ghostRide ? "GHOST CIRCUIT" : "NIGHT CIRCUIT";
-  trackCoordinate.textContent = climbing ? `${Math.round(hillLength)} M CLIMB` : "35° 41' N — 139° 41' E";
+  trackName.textContent = climbing ? "MOUNTAIN ASCENT" : checkpointRush ? "DESERT CHECKPOINTS" : ghostRide ? "DOWNTOWN GHOST LAP" : "DOWNTOWN CIRCUIT";
+  trackCoordinate.textContent = climbing || checkpointRush ? `${Math.round(hillLength)} M CLIMB` : "35° 41' N — 139° 41' E";
   timerLabel.textContent = climbing ? "CLIMB TIME" : checkpointRush ? "TIME LEFT" : "RACE TIME";
-  steerHint.textContent = climbing ? "Move across the road as you climb" : "Guide your car around the circuit";
+  steerHint.textContent = climbing || checkpointRush ? "Move across the road as you climb" : "Guide your car around the circuit";
   startIntro.textContent = climbing
-    ? "Climb the winding mountain road. Heavy vehicles have the torque to conquer steep grades."
+    ? "Climb a winding mountain road through pine forest and rocky cliffs to the summit viewpoint."
     : checkpointRush
-      ? "Reach each glowing gate before time runs out. Every checkpoint adds five seconds."
+      ? "Race the mountain pass in desert heat. Reach each glowing checkpoint before time runs out; every gate adds five seconds."
       : ghostRide
-        ? "Race your personal best ghost around the circuit. Your best run is saved for next time."
-        : "Pick a machine for three laps of the circuit.";
+        ? "Race your personal best around the same figure-eight city circuit. Your best run is saved for next time."
+        : "Pick a machine for three laps around the figure-eight downtown circuit.";
   startButtonText.nodeValue = climbing ? "START CLIMB " : checkpointRush ? "START RUSH " : ghostRide ? "START GHOST RIDE " : "START RACE ";
   for (const card of modeCards) {
     const selected = card.dataset.mode === mode;
@@ -839,7 +1370,8 @@ function setGameMode(mode) {
   activeGhostRecord = null;
   checkpointCount = 0;
   checkpointTimer = 20;
-  checkpointTarget = 0.28;
+  checkpointTarget = checkpointSpacing;
+  nextLapCheckpoint = 1;
   positionCheckpointGate();
   hillProgressDisplay.textContent = "0";
   hillProgressFill.style.width = "0%";
@@ -871,17 +1403,19 @@ function resetCar() {
   if (audioContext) {
     engineGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.08);
     engineHarmonicGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.08);
+    tireGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.08);
   }
   hillProgress = 0;
   hillLaneOffset = 0;
   checkpointCount = 0;
   checkpointTimer = 20;
-  checkpointTarget = 0.28;
+  checkpointTarget = checkpointSpacing;
+  nextLapCheckpoint = 1;
   runPath = [];
   pathSampleRemaining = 0;
   setCarAtStart();
   carState.speed = 0;
-  camera.position.copy(car.position).add(new THREE.Vector3(0, 8, gameMode === "hill" ? 12 : 19));
+  camera.position.copy(car.position).add(new THREE.Vector3(0, 8, gameMode === "hill" || gameMode === "checkpoint" ? 12 : 19));
   camera.lookAt(car.position);
   for (const opponent of opponents) {
     opponent.progress = opponent.startProgress;
@@ -891,7 +1425,6 @@ function resetCar() {
   }
   currentLap = 1;
   totalAngle = 0;
-  previousLapAngle = -Math.PI / 2;
   raceTime = 0;
   lapStartedAt = 0;
   bestLapTime = Infinity;
@@ -946,6 +1479,7 @@ startButton.addEventListener("click", startRace);
 for (const card of modeCards) {
   card.addEventListener("click", () => setGameMode(card.dataset.mode));
 }
+playButton.addEventListener("click", initializeAudio);
 for (const card of vehicleCards) {
   card.addEventListener("click", () => selectVehicle(card.dataset.vehicle));
 }
@@ -959,24 +1493,72 @@ function initializeAudio() {
     const harmonicFilter = audioContext.createBiquadFilter();
     engineGain = audioContext.createGain();
     engineHarmonicGain = audioContext.createGain();
+    tireGain = audioContext.createGain();
+    cityAmbienceGain = audioContext.createGain();
     engineOscillator.type = "sawtooth";
     engineHarmonic.type = "triangle";
     engineFilter.type = "lowpass";
     engineFilter.frequency.value = 440;
     harmonicFilter.type = "lowpass";
     harmonicFilter.frequency.value = 900;
+    const tireFilter = audioContext.createBiquadFilter();
+    tireFilter.type = "bandpass";
+    tireFilter.frequency.value = 1050;
+    tireFilter.Q.value = 0.7;
+    const cityFilter = audioContext.createBiquadFilter();
+    cityFilter.type = "lowpass";
+    cityFilter.frequency.value = 500;
+    const distantTrafficFilter = audioContext.createBiquadFilter();
+    distantTrafficFilter.type = "bandpass";
+    distantTrafficFilter.frequency.value = 260;
+    distantTrafficFilter.Q.value = 0.45;
+    const makeNoiseSource = () => {
+      const buffer = audioContext.createBuffer(1, audioContext.sampleRate * 3, audioContext.sampleRate);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < channel.length; i += 1) {
+        channel[i] = Math.random() * 2 - 1;
+      }
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      return source;
+    };
+    const cityNoise = makeNoiseSource();
+    const trafficNoise = makeNoiseSource();
     engineGain.gain.value = 0;
     engineHarmonicGain.gain.value = 0;
+    tireGain.gain.value = 0;
+    cityAmbienceGain.gain.value = 0.008;
+    const distantTrafficGain = audioContext.createGain();
+    distantTrafficGain.gain.value = 0.004;
     engineOscillator.connect(engineFilter);
     engineHarmonic.connect(harmonicFilter);
+    cityNoise.connect(cityFilter);
+    cityFilter.connect(cityAmbienceGain);
+    trafficNoise.connect(distantTrafficFilter);
+    distantTrafficFilter.connect(distantTrafficGain);
     engineFilter.connect(engineGain);
     harmonicFilter.connect(engineHarmonicGain);
+    tireGain.connect(tireFilter);
+    tireFilter.connect(audioContext.destination);
     engineGain.connect(audioContext.destination);
     engineHarmonicGain.connect(audioContext.destination);
+    cityAmbienceGain.connect(audioContext.destination);
+    distantTrafficGain.connect(audioContext.destination);
+    cityNoise.start();
+    trafficNoise.start();
     engineOscillator.start();
     engineHarmonic.start();
   }
   if (audioContext.state === "suspended") audioContext.resume();
+}
+
+function setDrivingAudio(engineLevel, tireLevel = 0) {
+  if (!audioContext) return;
+  const now = audioContext.currentTime;
+  engineGain.gain.setTargetAtTime(engineLevel, now, 0.12);
+  engineHarmonicGain.gain.setTargetAtTime(engineLevel * 0.4, now, 0.12);
+  tireGain.gain.setTargetAtTime(tireLevel, now, 0.1);
 }
 
 function playTone(frequency, duration, type = "triangle") {
@@ -999,17 +1581,11 @@ function createGhostCar(vehicle) {
   if (ghostCar) scene.remove(ghostCar);
   ghostCar = createCar(vehicle.appearance);
   ghostCar.traverse((part) => {
-    if (part.isPointLight) {
-      part.visible = false;
-    } else if (part.material) {
+    if (part.material) {
       part.material = part.material.clone();
       part.material.transparent = true;
       part.material.opacity = 0.32;
       part.material.depthWrite = false;
-      if (part.material.emissive) {
-        part.material.emissive.set(0x5dbccc);
-        part.material.emissiveIntensity = 0.4;
-      }
     }
   });
   ghostCar.visible = false;
@@ -1021,7 +1597,19 @@ async function startRace() {
   for (const card of modeCards) card.disabled = true;
   for (const card of vehicleCards) card.disabled = true;
   runMessage.hidden = true;
+  loadingLabel.textContent = gameMode === "checkpoint"
+    ? "PREPARING THE DESERT PASS"
+    : gameMode === "hill"
+      ? "PREPARING THE MOUNTAIN PASS"
+      : gameMode === "ghost"
+        ? "PREPARING THE SUNSET CITY"
+        : "PREPARING THE CITY";
+  loading.hidden = false;
+  loading.classList.remove("hidden");
+  startScreen.hidden = true;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
   try {
+    createEnvironment(gameMode);
     const response = await fetch(`/api/records?mode=${encodeURIComponent(gameMode)}&vehicle=${encodeURIComponent(selectedVehicleId)}`);
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Could not load your saved runs.");
@@ -1031,6 +1619,9 @@ async function startRace() {
     createGhostCar(vehicleCatalog[selectedVehicleId]);
     setGhostLabel(activeGhostRecord);
   } catch (error) {
+    disposeEnvironment();
+    loading.hidden = true;
+    startScreen.hidden = false;
     runMessage.textContent = error.message;
     runMessage.hidden = false;
     startButton.disabled = false;
@@ -1038,6 +1629,7 @@ async function startRace() {
     for (const card of vehicleCards) card.disabled = false;
     return;
   }
+  loading.hidden = true;
   resetCar();
   raceState = "countdown";
   countdownDisplay.hidden = false;
@@ -1058,12 +1650,10 @@ function showMenuView(view) {
 }
 
 function returnToMainMenu() {
-  if (audioContext) {
-    engineGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.08);
-    engineHarmonicGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.08);
-  }
+  setDrivingAudio(0);
   raceState = "ready";
   carState.speed = 0;
+  disposeEnvironment();
   countdownDisplay.hidden = true;
   if (ghostCar) ghostCar.visible = false;
   keys.clear();
@@ -1075,10 +1665,7 @@ function pauseRace() {
   pausedRaceState = raceState;
   raceState = "paused";
   keys.clear();
-  if (audioContext) {
-    engineGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.08);
-    engineHarmonicGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.08);
-  }
+  setDrivingAudio(0);
   pauseScreen.hidden = false;
   resumeButton.focus();
 }
@@ -1088,10 +1675,7 @@ function resumeRace() {
   raceState = pausedRaceState;
   pauseScreen.hidden = true;
   countdownDisplay.hidden = raceState === "racing";
-  if (audioContext && raceState === "racing") {
-    engineGain.gain.setTargetAtTime(0.035, audioContext.currentTime, 0.12);
-    engineHarmonicGain.gain.setTargetAtTime(0.014, audioContext.currentTime, 0.12);
-  }
+  if (audioContext && raceState === "racing") setDrivingAudio(0.035);
 }
 
 async function showLeaderboard() {
@@ -1218,8 +1802,7 @@ function updateRaceState(deltaTime) {
     if (goRemaining <= 0) {
       raceState = "racing";
       countdownDisplay.hidden = true;
-      engineGain.gain.setTargetAtTime(0.035, audioContext.currentTime, 0.12);
-      engineHarmonicGain.gain.setTargetAtTime(0.014, audioContext.currentTime, 0.12);
+      setDrivingAudio(0.035);
     }
   } else if (raceState === "racing") {
     raceTime += deltaTime;
@@ -1243,8 +1826,7 @@ function finishRace() {
   if (raceState === "finished") return;
   raceState = "finished";
   carState.speed = 0;
-  engineGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.12);
-  engineHarmonicGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.12);
+  setDrivingAudio(0);
   const finalTime = formatTime(raceTime);
   timerDisplay.textContent = finalTime;
   finishTimeDisplay.textContent = finalTime;
@@ -1281,9 +1863,12 @@ function finishRace() {
 function updateOpponentPose(opponent) {
   const angle = startAngle + opponent.progress;
   opponent.car.position.copy(makeOvalPoint(angle, opponent.laneOffset));
-  const tangentX = -radiusX * Math.sin(angle);
-  const tangentZ = radiusZ * Math.cos(angle);
-  opponent.car.rotation.y = Math.atan2(-tangentX, -tangentZ);
+  const tangent = trackTangent(angle);
+  opponent.car.rotation.set(
+    Math.atan2(trackElevation(angle + 0.005) - trackElevation(angle - 0.005), Math.hypot(tangent.x, tangent.z) * 0.01),
+    Math.atan2(-tangent.x, -tangent.z),
+    0,
+  );
 }
 
 for (const opponent of opponents) updateOpponentPose(opponent);
@@ -1315,7 +1900,8 @@ function updateOpponents(deltaTime) {
   for (const opponent of opponents) {
     if (opponent.finished) continue;
     const angle = startAngle + opponent.progress;
-    const tangentLength = Math.hypot(radiusX * Math.sin(angle), radiusZ * Math.cos(angle));
+    const tangent = trackTangent(angle);
+    const tangentLength = Math.hypot(tangent.x, tangent.z);
     opponent.progress += (opponent.speed / tangentLength) * deltaTime;
     if (opponent.progress >= Math.PI * 6) {
       opponent.progress = Math.PI * 6;
@@ -1323,50 +1909,52 @@ function updateOpponents(deltaTime) {
       opponent.finishTime = raceTime;
     }
     updateOpponentPose(opponent);
+    animateCarWheels(opponent.car, opponent.speed * deltaTime);
   }
 }
 
 function updateLap() {
-  const angle = Math.atan2(car.position.z / radiusZ, car.position.x / radiusX);
-  let delta = angle - previousLapAngle;
-  if (delta > Math.PI) delta -= Math.PI * 2;
-  if (delta < -Math.PI) delta += Math.PI * 2;
-  if (Math.abs(delta) < 0.45 && Math.sign(delta) === Math.sign(carState.speed || 1)) {
-    totalAngle += delta;
-    if (totalAngle >= Math.PI * 2) {
-      totalAngle -= Math.PI * 2;
-      const lapTime = raceTime - lapStartedAt;
-      bestLapTime = Math.min(bestLapTime, lapTime);
-      lapStartedAt = raceTime;
-      if (currentLap === 3) {
-        finishRace();
-      } else {
-        currentLap += 1;
-        lapDisplay.textContent = String(currentLap).padStart(2, "0");
-      }
+  if (carState.speed <= 0) return;
+  const angle = startAngle + (Math.PI * 2 * nextLapCheckpoint) / lapCheckpointCount;
+  const checkpoint = makeOvalPoint(angle);
+  const distance = Math.hypot(car.position.x - checkpoint.x, car.position.z - checkpoint.z);
+  if (distance > 12 || Math.abs(car.position.y - checkpoint.y) > 3.5) return;
+
+  if (nextLapCheckpoint === 0) return;
+  if (nextLapCheckpoint === lapCheckpointCount) {
+    const lapTime = raceTime - lapStartedAt;
+    bestLapTime = Math.min(bestLapTime, lapTime);
+    lapStartedAt = raceTime;
+    nextLapCheckpoint = 1;
+    totalAngle = 0;
+    if (currentLap === 3) {
+      finishRace();
+    } else {
+      currentLap += 1;
+      lapDisplay.textContent = String(currentLap).padStart(2, "0");
     }
+    return;
   }
-  previousLapAngle = angle;
+  totalAngle = (Math.PI * 2 * nextLapCheckpoint) / lapCheckpointCount;
+  nextLapCheckpoint += 1;
 }
 
 function updateCheckpointRush() {
-  const angle = Math.atan2(car.position.z / radiusZ, car.position.x / radiusX);
-  let delta = angle - previousLapAngle;
-  if (delta > Math.PI) delta -= Math.PI * 2;
-  if (delta < -Math.PI) delta += Math.PI * 2;
-  if (Math.abs(delta) < 0.45 && Math.sign(delta) === Math.sign(carState.speed || 1)) {
-    totalAngle += delta;
-    if (totalAngle >= checkpointTarget) {
-      checkpointCount += 1;
-      checkpointTimer += 5;
-      checkpointCountDisplay.textContent = String(checkpointCount);
-      checkpointTimeDisplay.textContent = String(Math.ceil(checkpointTimer));
-      checkpointTarget += (Math.PI * 2) / 16;
-      positionCheckpointGate();
-      playTone(640, 0.2);
+  if (carState.speed <= 0 || hillProgress < checkpointTarget) return;
+  while (hillProgress >= checkpointTarget) {
+    checkpointCount += 1;
+    checkpointTimer += 5;
+    checkpointCountDisplay.textContent = String(checkpointCount);
+    checkpointTimeDisplay.textContent = String(Math.ceil(checkpointTimer));
+    if (checkpointTarget >= hillLength) {
+      hillProgress = 0;
+      checkpointTarget = checkpointSpacing;
+      break;
     }
+    checkpointTarget = Math.min(checkpointTarget + checkpointSpacing, hillLength);
   }
-  previousLapAngle = angle;
+  positionCheckpointGate();
+  playTone(640, 0.2);
 }
 
 function sampleRunPath(deltaTime) {
@@ -1425,6 +2013,8 @@ function updateGhost() {
   const fraction = progress - firstIndex;
   const first = points[firstIndex];
   const second = points[secondIndex];
+  const previousX = ghostCar.position.x;
+  const previousZ = ghostCar.position.z;
   ghostCar.position.set(
     THREE.MathUtils.lerp(first.x, second.x, fraction),
     THREE.MathUtils.lerp(first.y, second.y, fraction),
@@ -1432,6 +2022,10 @@ function updateGhost() {
   );
   const headingDelta = Math.atan2(Math.sin(second.heading - first.heading), Math.cos(second.heading - first.heading));
   ghostCar.rotation.y = first.heading + headingDelta * fraction;
+  if (ghostCar.visible) {
+    const distance = Math.hypot(ghostCar.position.x - previousX, ghostCar.position.z - previousZ);
+    animateCarWheels(ghostCar, distance);
+  }
   ghostCar.visible = true;
 }
 
@@ -1447,7 +2041,7 @@ function update(deltaTime) {
   const vehicle = vehicleCatalog[selectedVehicleId];
   let maxSpeed = vehicle.topSpeed;
 
-  if (gameMode === "hill") {
+  if (gameMode === "hill" || gameMode === "checkpoint") {
     maxSpeed = vehicle.hillSpeedLimit;
     const slope = Math.asin(THREE.MathUtils.clamp(hillCurve.getTangentAt(hillProgress / hillLength).y, -1, 1));
     if (racing && throttle) {
@@ -1463,10 +2057,12 @@ function update(deltaTime) {
     hillLaneOffset = THREE.MathUtils.clamp(hillLaneOffset + steering * 7 * deltaTime, -5.3, 5.3);
     if (racing) {
       hillProgress = Math.min(hillLength, hillProgress + carState.speed * deltaTime);
-      const progressPercent = Math.floor((hillProgress / hillLength) * 100);
-      hillProgressDisplay.textContent = String(progressPercent);
-      hillProgressFill.style.width = `${progressPercent}%`;
-      if (hillProgress >= hillLength) finishRace();
+      if (gameMode === "hill") {
+        const progressPercent = Math.floor((hillProgress / hillLength) * 100);
+        hillProgressDisplay.textContent = String(progressPercent);
+        hillProgressFill.style.width = `${progressPercent}%`;
+        if (hillProgress >= hillLength) finishRace();
+      }
     }
     const progress = Math.min(hillProgress, hillLength - 0.001);
     const tangent = hillCurve.getTangentAt(progress / hillLength);
@@ -1475,7 +2071,7 @@ function update(deltaTime) {
     car.position.copy(hillRoadPoint(progress, hillLaneOffset));
     carState.heading = Math.atan2(-tangent.x, -tangent.z);
     const steeringStrength = THREE.MathUtils.clamp(carState.speed / 9, 0, 1);
-    car.rotation.set(slopeAngle, carState.heading, -steering * steeringStrength * 0.045);
+    car.rotation.set(slopeAngle, carState.heading, -steering * steeringStrength * 0.065);
   } else {
     if (racing && throttle) carState.speed += vehicle.acceleration * deltaTime;
     else if (racing && brake) carState.speed -= 37 * deltaTime;
@@ -1488,9 +2084,24 @@ function update(deltaTime) {
     forward.set(-Math.sin(carState.heading), 0, -Math.cos(carState.heading));
     car.position.addScaledVector(forward, carState.speed * deltaTime);
     car.rotation.y = carState.heading;
-    car.rotation.z = -steering * steeringStrength * 0.045;
-    car.rotation.x = Math.sin(clock.elapsedTime * 2.4) * Math.min(Math.abs(carState.speed) / maxSpeed, 1) * 0.008;
+    car.rotation.z = -steering * steeringStrength * 0.065;
+    const roadAngle = findNearestTrackAngle(car.position.x, car.position.z, car.position.y);
+    const roadPoint = makeOvalPoint(roadAngle);
+    const roadDistance = Math.hypot(car.position.x - roadPoint.x, car.position.z - roadPoint.z);
+    if (roadDistance <= trackWidth + 2) {
+      const tangent = trackTangent(roadAngle);
+      const sampleAngle = 0.005;
+      const slope = (
+        trackElevation(roadAngle + sampleAngle) - trackElevation(roadAngle - sampleAngle)
+      ) / (sampleAngle * 2 * Math.hypot(tangent.x, tangent.z));
+      car.position.y = roadPoint.y;
+      car.rotation.x = Math.atan(slope);
+    } else {
+      car.position.y = 0;
+      car.rotation.x = Math.sin(clock.elapsedTime * 2.4) * Math.min(Math.abs(carState.speed) / maxSpeed, 1) * 0.008;
+    }
   }
+  animateCarWheels(car, carState.speed * deltaTime, steering);
 
   const speed = Math.round(Math.abs(carState.speed) * 3.6);
   speedDisplay.textContent = String(speed).padStart(3, "0");
@@ -1503,6 +2114,13 @@ function update(deltaTime) {
     engineHarmonic.frequency.setTargetAtTime(enginePitch * 2.02, audioContext.currentTime, 0.08);
     engineGain.gain.setTargetAtTime(0.035 + speedFraction * 0.025 + (throttle ? 0.015 : 0), audioContext.currentTime, 0.12);
     engineHarmonicGain.gain.setTargetAtTime(0.012 + speedFraction * 0.01, audioContext.currentTime, 0.12);
+    tireGain.gain.setTargetAtTime(
+      speedFraction * (Math.abs(steering) > 0 ? 0.025 + Math.abs(steering) * 0.025 : 0.0015),
+      audioContext.currentTime,
+      0.1,
+    );
+  } else if (audioContext) {
+    tireGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.1);
   }
   if (racing && (gameMode === "circuit" || gameMode === "ghost")) updateLap();
   if (racing && gameMode === "checkpoint") updateCheckpointRush();
@@ -1512,9 +2130,10 @@ function update(deltaTime) {
   updateGhost();
 
   cameraTarget.copy(car.position);
-  cameraTarget.y += gameMode === "hill" ? 2.2 : 1.5;
-  cameraDesired.copy(car.position).addScaledVector(forward, gameMode === "hill" ? -15 : -11);
-  cameraDesired.y += gameMode === "hill" ? 8 : 6.8;
+  const mountainMode = gameMode === "hill" || gameMode === "checkpoint";
+  cameraTarget.y += mountainMode ? 5 : 3.8;
+  cameraDesired.copy(car.position).addScaledVector(forward, mountainMode ? -15 : -11);
+  cameraDesired.y += mountainMode ? 8 : 6.8;
   camera.position.lerp(cameraDesired, 1 - Math.exp(-4.2 * deltaTime));
   camera.lookAt(cameraTarget);
 }
@@ -1523,18 +2142,14 @@ function animate() {
   requestAnimationFrame(animate);
   const deltaTime = Math.min(clock.getDelta(), 0.05);
   update(deltaTime);
-  composer.render();
+  renderer.render(scene, camera);
 }
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  composer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 });
 
-loading.classList.add("hidden");
-setTimeout(() => loading.remove(), 400);
 animate();
