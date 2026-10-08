@@ -35,7 +35,7 @@ Install dependencies and start the game:
 npm install
 npm start
 ```
-
+Play it here: https://neon-racer-59ol.onrender.com
 Then open [http://localhost:3000](http://localhost:3000) in a modern browser.
 
 ## Built with voice
