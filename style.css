@@ -1,0 +1,1521 @@
+:root {
+  color-scheme: dark;
+  font-family: "Rajdhani", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --cyan: #16e6ff;
+  --pink: #ff3dbb;
+  --ink: #070816;
+  --muted: #8c94b7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--ink);
+}
+
+body {
+  min-width: 360px;
+}
+
+button {
+  font: inherit;
+}
+
+.game-shell,
+#game,
+#game canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#game canvas {
+  display: block;
+}
+
+.game-shell::after {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  content: "";
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(5, 6, 18, 0.66), transparent 23%, transparent 72%, rgba(5, 6, 18, 0.73)),
+    radial-gradient(ellipse at center, transparent 38%, rgba(5, 6, 18, 0.32) 100%);
+}
+
+.topbar,
+.race-hud,
+.bottom-bar,
+.track-caption,
+.loading,
+.countdown,
+.finish-screen {
+  position: absolute;
+  z-index: 2;
+}
+
+.topbar {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 83px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 5.2%;
+  border-bottom: 1px solid rgba(154, 171, 255, 0.12);
+  background: linear-gradient(180deg, rgba(5, 6, 18, 0.52), transparent);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #f3f5ff;
+  text-decoration: none;
+  font: 700 15px "Orbitron", sans-serif;
+  letter-spacing: 1.2px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  font: 800 17px "Orbitron", sans-serif;
+  transform: skew(-9deg);
+  box-shadow: 0 0 20px rgba(22, 230, 255, 0.48), inset 0 0 14px rgba(22, 230, 255, 0.2);
+}
+
+.brand-light {
+  color: #9da4c4;
+  font-weight: 500;
+}
+
+.race-status,
+.reset-button,
+.hud-label,
+.lap-caption,
+.track-caption,
+.controls,
+.camera-label {
+  font-family: "Orbitron", sans-serif;
+  letter-spacing: 1.1px;
+}
+
+.race-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #d2d6ef;
+  font-size: 9px;
+}
+
+.live-dot,
+.camera-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pink);
+  box-shadow: 0 0 11px var(--pink);
+}
+
+.status-divider {
+  color: #636b8b;
+}
+
+.reset-button {
+  padding: 9px 13px;
+  border: 1px solid rgba(22, 230, 255, 0.48);
+  background: rgba(8, 15, 32, 0.62);
+  color: #d7faff;
+  font-size: 9px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.reset-button:hover {
+  background: rgba(22, 230, 255, 0.12);
+  box-shadow: 0 0 16px rgba(22, 230, 255, 0.18);
+}
+
+.reset-button span {
+  padding-left: 8px;
+  color: var(--cyan);
+  font-size: 14px;
+}
+
+.race-hud {
+  top: 112px;
+  left: 5.2%;
+  display: flex;
+  gap: 35px;
+}
+
+.speed-card,
+.lap-card {
+  min-width: 132px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(22, 230, 255, 0.68);
+}
+
+.speed-card {
+  min-width: 150px;
+  border-color: rgba(22, 230, 255, 0.9);
+}
+
+.lap-card {
+  min-width: 103px;
+  border-color: rgba(255, 61, 187, 0.7);
+}
+
+.hill-progress-card {
+  min-width: 170px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 200, 87, 0.72);
+}
+
+.hill-progress-reading {
+  margin-top: 4px;
+  color: #fff;
+  font: 600 31px/1 "Orbitron", sans-serif;
+  text-shadow: 0 0 14px rgba(255, 200, 87, 0.35);
+}
+
+.hill-progress-reading span:last-child {
+  margin-left: 4px;
+  color: #ffc857;
+  font-size: 12px;
+}
+
+.hill-progress-track {
+  height: 4px;
+  margin-top: 9px;
+  overflow: hidden;
+  background: rgba(154, 171, 255, 0.2);
+}
+
+.hill-progress-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #ffc857;
+  box-shadow: 0 0 10px #ffc857;
+  transition: width 100ms linear;
+}
+
+.timer-card {
+  min-width: 116px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(22, 230, 255, 0.48);
+}
+
+.position-card {
+  min-width: 112px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 61, 187, 0.58);
+}
+
+.hud-label {
+  color: #9aa4c4;
+  font-size: 9px;
+}
+
+.hud-label span {
+  margin-left: 4px;
+  color: #66708f;
+  font-size: 7px;
+}
+
+.speed-reading,
+.lap-reading {
+  margin-top: 2px;
+  color: #f4f6ff;
+  font: 600 39px/1 "Orbitron", sans-serif;
+  letter-spacing: -2px;
+  text-shadow: 0 0 9px rgba(22, 230, 255, 0.32), 0 0 24px rgba(22, 230, 255, 0.25);
+}
+
+.speedometer {
+  display: block;
+  width: 138px;
+  height: 76px;
+  margin: 3px 0 -5px -4px;
+  overflow: visible;
+}
+
+.speedometer-track,
+.speedometer-fill {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 4;
+}
+
+.speedometer-track {
+  stroke: rgba(119, 142, 180, 0.24);
+}
+
+.speedometer-fill {
+  stroke: var(--cyan);
+  stroke-dasharray: 188.5;
+  stroke-dashoffset: 188.5;
+  filter: drop-shadow(0 0 4px var(--cyan)) drop-shadow(0 0 9px rgba(22, 230, 255, 0.8));
+  transition: stroke-dashoffset 100ms linear;
+}
+
+.speedometer-ticks {
+  fill: none;
+  stroke: rgba(213, 230, 255, 0.68);
+  stroke-width: 1.5;
+}
+
+.speedometer-needle {
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px var(--cyan));
+  transition: transform 100ms linear;
+}
+
+.speedometer-hub {
+  fill: var(--cyan);
+  filter: drop-shadow(0 0 5px var(--cyan));
+}
+
+.speedometer text {
+  fill: #7883a4;
+  font: 7px "Orbitron", sans-serif;
+}
+
+.speed-unit,
+.lap-total {
+  margin-left: 5px;
+  color: #7883a4;
+  font: 500 8px "Orbitron", sans-serif;
+  letter-spacing: 0.5px;
+}
+
+.lap-reading {
+  font-size: 34px;
+  text-shadow: 0 0 15px rgba(255, 61, 187, 0.17);
+}
+
+.timer-reading {
+  margin-top: 7px;
+  color: #f4f6ff;
+  font: 600 19px/1.2 "Orbitron", sans-serif;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 8px rgba(22, 230, 255, 0.25), 0 0 18px rgba(22, 230, 255, 0.18);
+  font-variant-numeric: tabular-nums;
+}
+
+.position-reading {
+  margin-top: 5px;
+  color: #fff;
+  font: 600 26px/1.1 "Orbitron", sans-serif;
+  letter-spacing: -1px;
+  text-shadow: 0 0 8px rgba(255, 61, 187, 0.48), 0 0 22px rgba(255, 61, 187, 0.32);
+}
+
+.position-total {
+  margin-left: 4px;
+  color: #7883a4;
+  font: 500 10px "Orbitron", sans-serif;
+  letter-spacing: 0;
+}
+
+.lap-total {
+  margin-left: 2px;
+  font-size: 11px;
+}
+
+.lap-caption {
+  margin-top: 7px;
+  color: #8089a8;
+  font-size: 7px;
+}
+
+.speed-meter {
+  width: 107px;
+  height: 2px;
+  margin-top: 9px;
+  background: rgba(134, 149, 190, 0.2);
+}
+
+.speed-meter span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  transition: width 100ms linear;
+}
+
+.track-caption {
+  top: 50%;
+  right: 5.2%;
+  color: rgba(224, 233, 255, 0.72);
+  font-size: 8px;
+  writing-mode: vertical-rl;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.caption-line {
+  width: 1px;
+  height: 31px;
+  background: var(--pink);
+  box-shadow: 0 0 8px var(--pink);
+}
+
+.caption-coordinate {
+  margin-top: 4px;
+  color: #7882a2;
+  font-size: 7px;
+}
+
+.bottom-bar {
+  right: 5.2%;
+  bottom: 0;
+  left: 5.2%;
+  height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(154, 171, 255, 0.14);
+  background: linear-gradient(0deg, rgba(5, 6, 18, 0.6), transparent);
+}
+
+.controls,
+.key-group {
+  display: flex;
+  align-items: center;
+}
+
+.controls {
+  gap: 18px;
+  color: #929bb9;
+  font-size: 8px;
+}
+
+.control-title {
+  color: var(--cyan);
+  font-size: 8px;
+}
+
+.key-group {
+  gap: 4px;
+}
+
+.key-group span {
+  margin-left: 5px;
+  font-size: 7px;
+}
+
+kbd {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid rgba(164, 180, 225, 0.3);
+  border-radius: 3px;
+  background: rgba(21, 25, 48, 0.77);
+  color: #e0e8ff;
+  font: 600 11px "Rajdhani", sans-serif;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.28);
+}
+
+.camera-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #8e98b7;
+  font-size: 8px;
+}
+
+.camera-icon {
+  color: var(--cyan);
+  font: 16px "Rajdhani", sans-serif;
+}
+
+.camera-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+}
+
+.loading {
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #c6d8eb;
+  font: 9px "Orbitron", sans-serif;
+  letter-spacing: 1.5px;
+  transform: translate(-50%, -50%);
+  transition: opacity 300ms ease;
+}
+
+.loading span {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--cyan);
+  animation: pulse 750ms ease-in-out infinite alternate;
+}
+
+.loading.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.countdown {
+  top: 50%;
+  left: 50%;
+  color: #f5fbff;
+  font: 800 clamp(76px, 13vw, 148px)/1 "Orbitron", sans-serif;
+  text-shadow: 0 0 20px rgba(22, 230, 255, 0.95), 0 0 75px rgba(22, 230, 255, 0.55);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.countdown.go {
+  color: #fff;
+  font-size: clamp(54px, 9vw, 98px);
+  text-shadow: 0 0 20px rgba(255, 61, 187, 0.95), 0 0 75px rgba(255, 61, 187, 0.55);
+}
+
+.start-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 6, 18, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.start-screen[hidden] {
+  display: none;
+}
+
+.menu-view[hidden],
+.start-screen[hidden] {
+  display: none;
+}
+
+.start-panel {
+  width: min(100%, 1060px);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 32px clamp(20px, 4vw, 48px);
+  border: 1px solid rgba(22, 230, 255, 0.65);
+  background:
+    radial-gradient(ellipse at 50% 0, rgba(22, 230, 255, 0.1), transparent 60%),
+    linear-gradient(145deg, rgba(15, 20, 41, 0.98), rgba(7, 9, 24, 0.98));
+  text-align: center;
+  box-shadow: 0 0 35px rgba(22, 230, 255, 0.24), 0 0 90px rgba(22, 230, 255, 0.12), inset 0 0 35px rgba(22, 230, 255, 0.06);
+}
+
+.main-menu-view {
+  padding: clamp(30px, 7vh, 90px) 12px;
+}
+
+.main-menu-view h1 {
+  font-size: clamp(42px, 8vw, 76px);
+}
+
+.menu-eyebrow {
+  color: var(--cyan);
+  font: 600 10px "Orbitron", sans-serif;
+  letter-spacing: 2px;
+}
+
+.menu-description {
+  margin: 12px 0 36px;
+  color: #aab4d0;
+  font-size: 20px;
+}
+
+.main-menu-actions,
+.pause-actions {
+  display: grid;
+  width: min(100%, 320px);
+  gap: 12px;
+  margin: 0 auto;
+}
+
+.menu-button {
+  width: 100%;
+}
+
+.secondary-button {
+  min-height: 44px;
+  padding: 11px 18px;
+  border: 1px solid rgba(154, 171, 255, 0.3);
+  background: rgba(21, 25, 48, 0.72);
+  color: #e8edff;
+  font: 600 9px "Orbitron", sans-serif;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  border-color: var(--cyan);
+  background: rgba(22, 230, 255, 0.1);
+}
+
+.information-view {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.information-view h1 {
+  margin-bottom: 24px;
+}
+
+.control-guide {
+  width: min(100%, 450px);
+  margin: 0 auto 24px;
+  text-align: left;
+}
+
+.control-guide p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0;
+  color: #e8edff;
+}
+
+.control-guide p span {
+  margin-left: auto;
+  color: #9ca7c5;
+}
+
+.menu-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.menu-navigation .start-button {
+  min-width: 220px;
+}
+
+.vehicle-navigation {
+  justify-content: flex-start;
+}
+
+.records-table-wrap {
+  max-height: 50vh;
+  margin: 0 0 22px;
+  overflow: auto;
+  border: 1px solid rgba(154, 171, 255, 0.18);
+}
+
+.records-table {
+  min-width: 560px;
+}
+
+.records-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.pause-screen {
+  z-index: 5;
+}
+
+.pause-panel {
+  width: min(100%, 460px);
+}
+
+.pause-actions .start-button {
+  width: 100%;
+}
+
+.ghost-label,
+.run-message {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  padding: 9px 14px;
+  border: 1px solid rgba(22, 230, 255, 0.55);
+  background: rgba(5, 10, 20, 0.78);
+  color: #dffaff;
+  font: 9px "Orbitron", sans-serif;
+  letter-spacing: 1px;
+  transform: translateX(-50%);
+}
+
+.ghost-label {
+  top: 205px;
+}
+
+.ghost-label span {
+  margin-left: 8px;
+  color: var(--cyan);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-message {
+  bottom: 96px;
+  max-width: calc(100% - 32px);
+  color: #fff;
+  text-align: center;
+}
+
+.run-message[hidden] {
+  display: none;
+}
+
+.start-panel h1 {
+  margin: 17px 0 7px;
+  color: #f5f7ff;
+  font: 700 clamp(27px, 7vw, 40px)/1.2 "Orbitron", sans-serif;
+  letter-spacing: 1px;
+  text-shadow: 0 0 25px rgba(22, 230, 255, 0.3);
+}
+
+.start-panel h1 span {
+  color: var(--cyan);
+  text-shadow: 0 0 12px rgba(22, 230, 255, 0.8), 0 0 32px rgba(22, 230, 255, 0.42);
+}
+
+.start-intro {
+  margin: 0 0 22px;
+  color: #aab4d0;
+  font-size: 18px;
+}
+
+.mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0 22px;
+}
+
+.mode-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 17px;
+  border: 1px solid rgba(154, 171, 255, 0.22);
+  background: linear-gradient(145deg, rgba(25, 31, 57, 0.8), rgba(7, 9, 24, 0.9));
+  color: #f5f7ff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.mode-card:hover,
+.mode-card.selected {
+  border-color: var(--cyan);
+  background: linear-gradient(110deg, rgba(22, 230, 255, 0.1), rgba(7, 9, 24, 0.94));
+  box-shadow: inset 0 0 18px rgba(22, 230, 255, 0.06);
+}
+
+.mode-card[data-mode="hill"].selected,
+.mode-card[data-mode="hill"]:hover {
+  border-color: #ffc857;
+  background: linear-gradient(110deg, rgba(255, 200, 87, 0.1), rgba(7, 9, 24, 0.94));
+  box-shadow: inset 0 0 18px rgba(255, 200, 87, 0.06);
+}
+
+.mode-card:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.mode-number {
+  color: var(--cyan);
+  font: 8px "Orbitron", sans-serif;
+  letter-spacing: 1px;
+}
+
+.mode-card[data-mode="hill"] .mode-number {
+  color: #ffc857;
+}
+
+.mode-card strong {
+  font: 600 13px "Orbitron", sans-serif;
+  letter-spacing: 0.5px;
+}
+
+.mode-card > span:last-child {
+  color: #9ca7c5;
+  font-size: 14px;
+}
+
+.vehicle-prompt {
+  margin: 0 0 11px;
+  color: #b8c2df;
+  font: 600 10px "Orbitron", sans-serif;
+  letter-spacing: 1.2px;
+  text-align: left;
+}
+
+.vehicle-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  text-align: left;
+}
+
+.menu-navigation {
+  align-items: stretch;
+  flex-direction: column-reverse;
+}
+
+.menu-navigation .start-button {
+  min-width: 0;
+  width: 100%;
+}
+
+.vehicle-card {
+  --vehicle-color: #16e6ff;
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(154, 171, 255, 0.22);
+  background: linear-gradient(155deg, rgba(25, 31, 57, 0.88), rgba(7, 9, 24, 0.92));
+  color: #f5f7ff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.sports-car {
+  --vehicle-color: #ff5a64;
+}
+
+.rally-car {
+  --vehicle-color: #16e6ff;
+}
+
+.truck {
+  --vehicle-color: #ffc857;
+}
+
+.vehicle-card:hover {
+  transform: translateY(-3px);
+}
+
+.vehicle-card.selected {
+  border-color: var(--vehicle-color);
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--vehicle-color) 12%, transparent), transparent 55%),
+    linear-gradient(155deg, rgba(25, 31, 57, 0.96), rgba(7, 9, 24, 0.96));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--vehicle-color) 24%, transparent), inset 0 0 18px color-mix(in srgb, var(--vehicle-color) 7%, transparent);
+}
+
+.vehicle-card:focus-visible {
+  outline: 2px solid var(--vehicle-color);
+  outline-offset: 3px;
+}
+
+.vehicle-art {
+  position: relative;
+  display: block;
+  height: 62px;
+  margin: 0 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--vehicle-color) 32%, transparent);
+}
+
+.vehicle-art::before,
+.vehicle-art::after {
+  position: absolute;
+  left: 50%;
+  content: "";
+  transform: translateX(-50%);
+}
+
+.vehicle-art::before {
+  bottom: 13px;
+  width: 122px;
+  height: 23px;
+  border: 1px solid color-mix(in srgb, var(--vehicle-color) 85%, white);
+  border-radius: 13px 20px 6px 6px;
+  background: color-mix(in srgb, var(--vehicle-color) 30%, #11172a);
+  box-shadow: 0 0 15px color-mix(in srgb, var(--vehicle-color) 40%, transparent);
+}
+
+.vehicle-art::after {
+  bottom: 34px;
+  width: 58px;
+  height: 15px;
+  border: 1px solid color-mix(in srgb, var(--vehicle-color) 72%, white);
+  border-radius: 17px 17px 3px 3px;
+  background: color-mix(in srgb, var(--vehicle-color) 22%, #101629);
+}
+
+.truck .vehicle-art::before {
+  width: 130px;
+  height: 30px;
+  border-radius: 5px 13px 4px 4px;
+}
+
+.truck .vehicle-art::after {
+  bottom: 41px;
+  width: 70px;
+  height: 20px;
+  border-radius: 4px 9px 2px 2px;
+}
+
+.vehicle-category,
+.vehicle-name,
+.vehicle-trait,
+.vehicle-stats > span > span {
+  font-family: "Orbitron", sans-serif;
+}
+
+.vehicle-category {
+  color: var(--vehicle-color);
+  font-size: 8px;
+  letter-spacing: 1.1px;
+}
+
+.vehicle-name {
+  margin-top: 7px;
+  font-size: 15px;
+  letter-spacing: 0.4px;
+}
+
+.vehicle-description {
+  min-height: 21px;
+  margin-top: 3px;
+  color: #9ca7c5;
+  font-size: 14px;
+}
+
+.vehicle-stats {
+  display: grid;
+  gap: 8px;
+  margin-top: 15px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(154, 171, 255, 0.14);
+  border-bottom: 1px solid rgba(154, 171, 255, 0.14);
+}
+
+.vehicle-stats > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vehicle-stats > span > span {
+  color: #818cab;
+  font-size: 7px;
+  letter-spacing: 0.7px;
+}
+
+.vehicle-stats strong {
+  color: #f2f5ff;
+  font: 600 14px "Orbitron", sans-serif;
+  white-space: nowrap;
+}
+
+.vehicle-stats small {
+  color: #8d98b8;
+  font: 8px "Orbitron", sans-serif;
+}
+
+.vehicle-trait {
+  margin-top: 12px;
+  color: var(--vehicle-color);
+  font-size: 7px;
+  letter-spacing: 0.7px;
+}
+
+.selection-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.start-controls {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid rgba(154, 171, 255, 0.16);
+  background: rgba(5, 6, 18, 0.4);
+  text-align: left;
+}
+
+.start-control {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.start-keys {
+  display: flex;
+  gap: 4px;
+  min-width: 67px;
+}
+
+.start-control strong,
+.start-control small {
+  display: block;
+}
+
+.start-control strong {
+  color: #e8edff;
+  font: 9px "Orbitron", sans-serif;
+  letter-spacing: 0.8px;
+}
+
+.start-control small {
+  margin-top: 3px;
+  color: #8c94b7;
+  font-size: 13px;
+}
+
+.start-tip {
+  margin: 0 0 10px;
+  color: #8c94b7;
+  font-size: 13px;
+  text-align: center;
+}
+
+.start-button {
+  min-width: 190px;
+  padding: 14px 20px;
+  border: 1px solid var(--cyan);
+  background: rgba(22, 230, 255, 0.13);
+  color: #e8fcff;
+  font: 10px "Orbitron", sans-serif;
+  letter-spacing: 1.2px;
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(22, 230, 255, 0.24), inset 0 0 14px rgba(22, 230, 255, 0.08);
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.start-button:hover {
+  background: rgba(22, 230, 255, 0.24);
+  box-shadow: 0 0 26px rgba(22, 230, 255, 0.46), inset 0 0 18px rgba(22, 230, 255, 0.12);
+}
+
+.start-button span {
+  padding-left: 10px;
+  color: var(--cyan);
+  font-size: 15px;
+}
+
+@media (max-width: 760px) {
+  .vehicle-options {
+    gap: 9px;
+  }
+
+  .vehicle-card {
+    padding: 13px;
+  }
+
+  .vehicle-name {
+    font-size: 12px;
+  }
+
+  .vehicle-stats strong {
+    font-size: 11px;
+  }
+
+  .vehicle-stats > span > span {
+    font-size: 6px;
+  }
+
+  .selection-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .selection-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .start-tip {
+    margin: 0;
+    text-align: left;
+  }
+}
+
+@media (max-width: 520px) {
+  .start-screen {
+    padding: 12px;
+  }
+
+  .start-panel {
+    padding: 22px 16px;
+  }
+
+  .vehicle-options {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .mode-options {
+    gap: 7px;
+    margin: 14px 0 17px;
+  }
+
+  .mode-card {
+    gap: 5px;
+    padding: 11px 9px;
+  }
+
+  .mode-card strong {
+    font-size: 10px;
+  }
+
+  .mode-card > span:last-child {
+    font-size: 12px;
+  }
+
+  .vehicle-card {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    column-gap: 12px;
+    padding: 11px;
+  }
+
+  .vehicle-art {
+    grid-row: span 4;
+    height: 100%;
+    min-height: 98px;
+    margin: 0;
+  }
+
+  .vehicle-art::before {
+    width: 72px;
+    height: 19px;
+  }
+
+  .vehicle-art::after {
+    width: 40px;
+    height: 13px;
+  }
+
+  .truck .vehicle-art::before {
+    width: 76px;
+    height: 24px;
+  }
+
+  .truck .vehicle-art::after {
+    width: 46px;
+    height: 17px;
+  }
+
+  .vehicle-category,
+  .vehicle-name,
+  .vehicle-description,
+  .vehicle-trait {
+    grid-column: 2;
+  }
+
+  .vehicle-name {
+    margin-top: 3px;
+  }
+
+  .vehicle-description {
+    min-height: auto;
+    margin: 0;
+  }
+
+  .vehicle-stats {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    margin-top: 8px;
+    padding: 8px 0 4px;
+    border-bottom: 0;
+  }
+
+  .vehicle-stats > span {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .vehicle-trait {
+    margin-top: 2px;
+  }
+
+  .selection-action {
+    flex-direction: column;
+  }
+
+  .start-button {
+    width: 100%;
+  }
+}
+
+.finish-screen {
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 6, 18, 0.76);
+  backdrop-filter: blur(9px);
+}
+
+.finish-screen[hidden] {
+  display: none;
+}
+
+.finish-panel {
+  width: min(100%, 480px);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 32px 36px;
+  border: 1px solid rgba(22, 230, 255, 0.45);
+  background: linear-gradient(145deg, rgba(15, 20, 41, 0.97), rgba(7, 9, 24, 0.97));
+  text-align: center;
+  box-shadow: 0 0 36px rgba(22, 230, 255, 0.28), 0 0 85px rgba(22, 230, 255, 0.12), inset 0 0 40px rgba(22, 230, 255, 0.07);
+}
+
+.finish-kicker,
+.finish-time-label {
+  color: #9ba6c7;
+  font: 9px "Orbitron", sans-serif;
+  letter-spacing: 1.7px;
+}
+
+.finish-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+.finish-panel h1 {
+  margin: 19px 0 8px;
+  color: #f5f7ff;
+  font: 700 clamp(24px, 6vw, 34px)/1.25 "Orbitron", sans-serif;
+  letter-spacing: 1px;
+}
+
+.finish-panel h1 span {
+  color: var(--cyan);
+  text-shadow: 0 0 20px rgba(22, 230, 255, 0.42);
+}
+
+.finish-laps {
+  margin: 0 0 24px;
+  color: #8c94b7;
+  font: 9px "Orbitron", sans-serif;
+  letter-spacing: 1.4px;
+}
+
+.finish-place {
+  margin: -14px 0 26px;
+  color: var(--cyan);
+  font: 600 16px "Orbitron", sans-serif;
+  letter-spacing: 1.2px;
+  text-shadow: 0 0 14px rgba(22, 230, 255, 0.3);
+}
+
+.finish-time-label {
+  color: var(--pink);
+  font-size: 8px;
+}
+
+.finish-time {
+  margin: 10px 0 30px;
+  color: #fff;
+  font: 600 clamp(34px, 10vw, 52px)/1 "Orbitron", sans-serif;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 22px rgba(22, 230, 255, 0.32);
+}
+
+.finish-total-time {
+  margin-bottom: 18px;
+}
+
+.finish-best-lap {
+  margin: 8px 0 20px;
+  color: #fff;
+  font: 600 24px/1 "Orbitron", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.leaderboard-form {
+  margin: 0 0 20px;
+  text-align: left;
+}
+
+.leaderboard-form label,
+.leaderboard-section h2 {
+  color: #9ba6c7;
+  font: 9px "Orbitron", sans-serif;
+  letter-spacing: 1.2px;
+}
+
+.leaderboard-entry {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.leaderboard-entry input {
+  min-width: 0;
+  flex: 1;
+  padding: 10px;
+  border: 1px solid rgba(154, 171, 255, 0.3);
+  background: rgba(5, 6, 18, 0.72);
+  color: #f5f7ff;
+  font: 14px "Rajdhani", sans-serif;
+}
+
+.leaderboard-entry button {
+  padding: 0 12px;
+  border: 1px solid rgba(22, 230, 255, 0.55);
+  background: rgba(22, 230, 255, 0.1);
+  color: #e8fcff;
+  font: 9px "Orbitron", sans-serif;
+  cursor: pointer;
+}
+
+.leaderboard-entry button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.leaderboard-error {
+  margin: 8px 0 0;
+  color: #ff8acb;
+  font-size: 13px;
+}
+
+.leaderboard-section {
+  margin: 0 0 22px;
+}
+
+.leaderboard-section h2 {
+  margin: 0 0 10px;
+  text-align: left;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #e7ebff;
+  font-size: 14px;
+  text-align: left;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 7px 6px;
+  border-bottom: 1px solid rgba(154, 171, 255, 0.14);
+}
+
+.leaderboard-table th {
+  color: #7883a4;
+  font: 8px "Orbitron", sans-serif;
+  letter-spacing: 0.8px;
+}
+
+.leaderboard-table td:first-child,
+.leaderboard-table td:last-child {
+  color: var(--cyan);
+  font-variant-numeric: tabular-nums;
+}
+
+.finish-restart {
+  min-width: 180px;
+  padding: 13px 20px;
+  border: 1px solid var(--cyan);
+  background: rgba(22, 230, 255, 0.1);
+  color: #e8fcff;
+  font: 10px "Orbitron", sans-serif;
+  letter-spacing: 1.2px;
+  cursor: pointer;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.finish-restart:hover {
+  background: rgba(22, 230, 255, 0.2);
+  box-shadow: 0 0 22px rgba(22, 230, 255, 0.24);
+}
+
+.finish-restart span {
+  padding-left: 8px;
+  color: var(--cyan);
+  font-size: 15px;
+}
+
+@keyframes pulse {
+  to {
+    opacity: 0.28;
+    transform: scale(0.65);
+  }
+}
+
+@media (max-width: 650px) {
+  .topbar {
+    height: 68px;
+    padding: 0 5%;
+  }
+
+  .brand {
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .brand-mark {
+    width: 27px;
+    height: 27px;
+  }
+
+  .race-status {
+    gap: 6px;
+    font-size: 7px;
+  }
+
+  .race-hud {
+    top: 91px;
+    left: 5%;
+    gap: 22px;
+  }
+
+  .speed-reading {
+    font-size: 33px;
+  }
+
+  .speed-card {
+    min-width: 120px;
+  }
+
+  .speedometer {
+    width: 118px;
+    height: 66px;
+  }
+
+  .lap-reading {
+    font-size: 29px;
+  }
+
+  .timer-card {
+    min-width: 94px;
+  }
+
+  .hill-progress-card {
+    min-width: 135px;
+  }
+
+  .timer-reading {
+    font-size: 15px;
+  }
+
+  .position-card {
+    position: absolute;
+    top: 88px;
+    right: 5%;
+    min-width: 100px;
+    padding-left: 10px;
+  }
+
+  .position-reading {
+    font-size: 23px;
+  }
+
+  .track-caption {
+    right: 4%;
+  }
+
+  .bottom-bar {
+    right: 5%;
+    left: 5%;
+    height: 67px;
+  }
+
+  .controls {
+    gap: 10px;
+  }
+
+  .key-group span {
+    display: none;
+  }
+
+  .camera-label {
+    font-size: 7px;
+  }
+}
+
+@media (max-width: 420px) {
+  .race-status {
+    display: none;
+  }
+
+  .race-hud {
+    gap: 14px;
+  }
+
+  .speed-card {
+    min-width: 100px;
+  }
+
+  .lap-card {
+    min-width: 82px;
+  }
+
+  .timer-card {
+    min-width: 90px;
+  }
+
+  .hill-progress-card {
+    min-width: 110px;
+  }
+
+  .hill-progress-reading {
+    font-size: 26px;
+  }
+
+  .position-card {
+    top: 86px;
+  }
+
+  .controls {
+    gap: 7px;
+  }
+}
+
+@media (max-width: 480px) {
+  .start-panel {
+    padding: 30px 22px;
+  }
+}

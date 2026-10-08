@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#e6d3a9" />
+    <title>Coast Rally</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/node_modules/three/build/three.module.js",
+          "three/addons/": "/node_modules/three/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="/game.js"></script>
+  </head>
+  <body>
+    <main class="game-shell">
+      <div id="game" aria-label="Coast Rally 3D game"></div>
+
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Coast Rally home">
+          <span class="brand-mark">C</span>
+          <span>COAST<span class="brand-light"> RALLY</span></span>
+        </a>
+        <div id="race-status" class="race-status"><span class="live-dot"></span> <span id="mode-status">CIRCUIT RACE</span> <span class="status-divider">/</span> <span id="track-status">TRACK 01</span></div>
+        <button id="reset-button" class="reset-button" type="button">RESTART <span>↻</span></button>
+      </header>
+
+      <section class="race-hud" aria-label="Race telemetry">
+        <div class="speed-card">
+          <div class="hud-label">SPEED <span>KM/H</span></div>
+          <svg class="speedometer" viewBox="0 0 150 88" role="img" aria-label="Live speedometer in kilometers per hour">
+            <path class="speedometer-track" d="M 15 75 A 60 60 0 0 1 135 75" />
+            <path id="speedometer-fill" class="speedometer-fill" d="M 15 75 A 60 60 0 0 1 135 75" />
+            <g class="speedometer-ticks">
+              <path d="M 17 75 L 25 75 M 25 45 L 32 49 M 45 23 L 49 31 M 75 15 L 75 24 M 105 23 L 101 31 M 125 45 L 118 49 M 133 75 L 125 75" />
+            </g>
+            <line id="speedometer-needle" class="speedometer-needle" x1="75" y1="75" x2="75" y2="30" />
+            <circle class="speedometer-hub" cx="75" cy="75" r="4" />
+            <text x="12" y="87">0</text>
+            <text x="128" y="87">190</text>
+          </svg>
+          <div class="speed-reading"><span id="speed">000</span><span class="speed-unit">KM/H</span></div>
+        </div>
+        <div class="lap-card">
+          <div class="hud-label">LAP</div>
+          <div class="lap-reading"><span id="lap">01</span><span class="lap-total">/ 03</span></div>
+          <div class="lap-caption">NEON CIRCUIT</div>
+        </div>
+        <div id="hill-progress-card" class="hill-progress-card" hidden>
+          <div class="hud-label">CLIMB PROGRESS</div>
+          <div class="hill-progress-reading"><span id="hill-progress">0</span><span>%</span></div>
+          <div class="hill-progress-track"><span id="hill-progress-fill"></span></div>
+          <div class="lap-caption">SUMMIT FINISH</div>
+        </div>
+        <div id="checkpoint-card" class="hill-progress-card" hidden>
+          <div class="hud-label">TIME LEFT</div>
+          <div class="hill-progress-reading"><span id="checkpoint-time">20</span><span>s</span></div>
+          <div class="lap-caption">CHECKPOINTS <span id="checkpoint-count">0</span></div>
+        </div>
+        <div class="timer-card">
+          <div id="timer-label" class="hud-label">RACE TIME</div>
+          <div class="timer-reading" id="timer">00:00.00</div>
+          <div class="lap-caption">ELAPSED</div>
+        </div>
+        <div class="position-card" aria-live="polite">
+          <div class="hud-label">POSITION</div>
+          <div class="position-reading"><span id="position">1ST</span><span class="position-total">/ 04</span></div>
+          <div class="lap-caption">RACE STANDING</div>
+        </div>
+      </section>
+      <div id="ghost-label" class="ghost-label" hidden>GHOST RUN <span id="ghost-time">--:--.--</span></div>
+      <div id="run-message" class="run-message" role="status" aria-live="polite" hidden></div>
+
+      <div id="track-caption" class="track-caption"><span class="caption-line"></span> <span id="track-name">NIGHT CIRCUIT</span> <span id="track-coordinate" class="caption-coordinate">35° 41' N — 139° 41' E</span></div>
+
+      <footer class="bottom-bar">
+        <div class="controls">
+          <span class="control-title">DRIVE</span>
+          <span class="key-group"><kbd>↑</kbd><kbd>↓</kbd><span>THROTTLE / BRAKE</span></span>
+          <span class="key-group"><kbd>←</kbd><kbd>→</kbd><span>STEER</span></span>
+        </div>
+        <div class="camera-label"><span class="camera-icon">◉</span> CHASE CAM <span class="camera-dot"></span></div>
+      </footer>
+      <div id="countdown" class="countdown" aria-live="assertive" hidden>3</div>
+      <section id="start-screen" class="start-screen" aria-labelledby="main-menu-title" aria-modal="true" role="dialog">
+        <div class="start-panel">
+          <section id="main-menu" class="menu-view main-menu-view" aria-labelledby="main-menu-title">
+            <div class="menu-eyebrow">SUN, SAND & OPEN ROADS</div>
+            <h1 id="main-menu-title">COAST <span>RALLY</span></h1>
+            <p class="menu-description">Find your line along the coast.</p>
+            <div class="main-menu-actions">
+              <button id="play-button" class="start-button menu-button" type="button">PLAY <span>→</span></button>
+              <button id="controls-button" class="secondary-button" type="button">CONTROLS</button>
+              <button id="leaderboard-button" class="secondary-button" type="button">LEADERBOARD</button>
+            </div>
+          </section>
+          <section id="controls-menu" class="menu-view information-view" aria-labelledby="controls-title" hidden>
+            <div class="menu-eyebrow">READY FOR THE ROAD?</div>
+            <h1 id="controls-title">CONTROLS</h1>
+            <div class="control-guide">
+              <p><kbd>↑</kbd> / <kbd>W</kbd><span>Accelerate</span></p>
+              <p><kbd>↓</kbd> / <kbd>S</kbd><span>Brake / reverse</span></p>
+              <p><kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd><span>Steer</span></p>
+              <p><kbd>ESC</kbd><span>Pause or resume</span></p>
+            </div>
+            <button id="controls-back-button" class="secondary-button" type="button">BACK TO MENU</button>
+          </section>
+          <section id="leaderboard-menu" class="menu-view information-view" aria-labelledby="leaderboard-title" hidden>
+            <div class="menu-eyebrow">YOUR PERSONAL BESTS</div>
+            <h1 id="leaderboard-title">LEADERBOARD</h1>
+            <p id="records-error" class="leaderboard-error" role="alert" hidden></p>
+            <div class="records-table-wrap">
+              <table class="leaderboard-table records-table">
+                <thead>
+                  <tr><th scope="col">MODE</th><th scope="col">VEHICLE</th><th scope="col">BEST TIME</th><th scope="col">CHECKPOINTS</th></tr>
+                </thead>
+                <tbody id="records-rows"></tbody>
+              </table>
+            </div>
+            <button id="leaderboard-back-button" class="secondary-button" type="button">BACK TO MENU</button>
+          </section>
+          <section id="mode-select" class="menu-view" aria-labelledby="start-title" hidden>
+            <div id="start-kicker" class="finish-kicker"><span class="live-dot"></span> CHOOSE YOUR CHALLENGE</div>
+            <h1 id="start-title">SELECT GAME <span>MODE</span></h1>
+            <p id="start-intro" class="start-intro">Pick a race, then choose your machine.</p>
+            <div class="mode-options" role="group" aria-label="Choose a game mode">
+            <button class="mode-card selected" type="button" data-mode="circuit" aria-pressed="true">
+              <span class="mode-number">01 / CIRCUIT</span>
+              <strong>CIRCUIT RACE</strong>
+              <span>Three laps around the coastal loop.</span>
+            </button>
+            <button class="mode-card" type="button" data-mode="hill" aria-pressed="false">
+              <span class="mode-number">02 / ASCENT</span>
+              <strong>HILL CLIMB</strong>
+              <span>Take the winding road all the way to the summit.</span>
+            </button>
+            <button class="mode-card" type="button" data-mode="ghost" aria-pressed="false">
+              <span class="mode-number">03 / TIME TRIAL</span>
+              <strong>GHOST RIDE</strong>
+              <span>Race your recorded best through a see-through replay.</span>
+            </button>
+            <button class="mode-card" type="button" data-mode="checkpoint" aria-pressed="false">
+              <span class="mode-number">04 / SURVIVAL</span>
+              <strong>CHECKPOINT RUSH</strong>
+              <span>Reach each gate to add five seconds to the clock.</span>
+            </button>
+            </div>
+            <div class="menu-navigation">
+              <button id="mode-back-button" class="secondary-button" type="button">MAIN MENU</button>
+              <button id="mode-next-button" class="start-button" type="button">CHOOSE VEHICLE <span>→</span></button>
+            </div>
+          </section>
+          <section id="vehicle-select" class="menu-view" aria-labelledby="vehicle-title" hidden>
+          <h2 id="vehicle-title" class="vehicle-prompt">CHOOSE YOUR RIDE</h2>
+          <div class="vehicle-options" role="group" aria-label="Choose a vehicle">
+            <button class="vehicle-card sports-car" type="button" data-vehicle="sports" aria-pressed="false">
+              <span class="vehicle-art" aria-hidden="true"></span>
+              <span class="vehicle-category">01 / SPEED</span>
+              <strong class="vehicle-name">DUNE BUGGY</strong>
+              <span class="vehicle-description">Light, quick and happy on loose sand.</span>
+              <span class="vehicle-stats">
+                <span><span>TOP SPEED</span><strong>210 <small>KM/H</small></strong></span>
+                <span><span>HANDLING</span><strong>62 <small>/ 100</small></strong></span>
+                <span><span>WEIGHT</span><strong>1,280 <small>KG</small></strong></span>
+              </span>
+              <span class="vehicle-trait">LIGHT · QUICK · OPEN CAGE</span>
+            </button>
+            <button class="vehicle-card rally-car selected" type="button" data-vehicle="rally" aria-pressed="true">
+              <span class="vehicle-art" aria-hidden="true"></span>
+              <span class="vehicle-category">02 / ALL-ROUND</span>
+              <strong class="vehicle-name">RALLY JEEP</strong>
+              <span class="vehicle-description">Sure-footed traction for rough trails.</span>
+              <span class="vehicle-stats">
+                <span><span>TOP SPEED</span><strong>180 <small>KM/H</small></strong></span>
+                <span><span>HANDLING</span><strong>88 <small>/ 100</small></strong></span>
+                <span><span>WEIGHT</span><strong>1,460 <small>KG</small></strong></span>
+              </span>
+              <span class="vehicle-trait">ALL-ROUND · STEADY CLIMBS</span>
+            </button>
+            <button class="vehicle-card truck" type="button" data-vehicle="truck" aria-pressed="false">
+              <span class="vehicle-art" aria-hidden="true"></span>
+              <span class="vehicle-category">03 / MUSCLE</span>
+              <strong class="vehicle-name">BEACH PICKUP</strong>
+              <span class="vehicle-description">Low gearing and plenty of hill-pulling torque.</span>
+              <span class="vehicle-stats">
+                <span><span>TOP SPEED</span><strong>130 <small>KM/H</small></strong></span>
+                <span><span>HANDLING</span><strong>72 <small>/ 100</small></strong></span>
+                <span><span>WEIGHT</span><strong>2,850 <small>KG</small></strong></span>
+              </span>
+              <span class="vehicle-trait">STRONG TORQUE · UTILITY BED</span>
+            </button>
+          </div>
+          <div class="selection-footer">
+            <div class="start-controls">
+              <div class="start-control">
+                <span class="start-keys"><kbd>↑</kbd><kbd>↓</kbd></span>
+                <span><strong>THROTTLE / BRAKE</strong><small>Build speed and control your pace</small></span>
+              </div>
+              <div class="start-control">
+                <span class="start-keys"><kbd>←</kbd><kbd>→</kbd></span>
+                <span><strong>STEER</strong><small id="steer-hint">Guide your car around the circuit</small></span>
+              </div>
+            </div>
+            <div class="selection-action">
+              <p class="start-tip">WASD keys work too · Sound starts when you launch</p>
+              <button id="start-button" class="start-button" type="button">START RACE <span>→</span></button>
+            </div>
+          </div>
+          <div class="menu-navigation vehicle-navigation">
+            <button id="vehicle-back-button" class="secondary-button" type="button">BACK TO MODES</button>
+          </div>
+          </section>
+        </div>
+      </section>
+      <section id="pause-screen" class="start-screen pause-screen" aria-labelledby="pause-title" aria-modal="true" role="dialog" hidden>
+        <div class="start-panel pause-panel">
+          <div class="menu-eyebrow">TAKE A BREATHER</div>
+          <h1 id="pause-title">PAUSED</h1>
+          <div class="pause-actions">
+            <button id="resume-button" class="start-button" type="button">RESUME <span>→</span></button>
+            <button id="pause-restart-button" class="secondary-button" type="button">RESTART</button>
+            <button id="pause-main-menu-button" class="secondary-button" type="button">MAIN MENU</button>
+          </div>
+        </div>
+      </section>
+      <section id="finish-screen" class="finish-screen" aria-labelledby="finish-title" aria-live="assertive" hidden>
+        <div class="finish-panel">
+          <div id="finish-kicker" class="finish-kicker"><span class="live-dot"></span> CIRCUIT COMPLETE</div>
+          <h1 id="finish-title">RACE <span>FINISHED</span></h1>
+          <p id="finish-laps" class="finish-laps">ALL 3 LAPS COMPLETE</p>
+          <p id="finish-checkpoints" class="finish-laps" hidden>CHECKPOINTS REACHED: 0</p>
+          <div id="finish-place" class="finish-place">1ST PLACE</div>
+          <div id="finish-time-label" class="finish-time-label">TOTAL TIME</div>
+          <div id="finish-time" class="finish-time finish-total-time">00:00.00</div>
+          <div id="finish-best-label" class="finish-time-label">BEST LAP</div>
+          <div id="finish-best-lap" class="finish-best-lap">00:00.00</div>
+          <form id="leaderboard-form" class="leaderboard-form">
+            <label for="leaderboard-name">ENTER YOUR NAME</label>
+            <div class="leaderboard-entry">
+              <input id="leaderboard-name" name="name" type="text" maxlength="20" autocomplete="nickname" required />
+              <button id="leaderboard-submit" type="submit">SAVE TIME</button>
+            </div>
+            <p id="leaderboard-error" class="leaderboard-error" role="alert" hidden></p>
+          </form>
+          <section id="leaderboard-section" class="leaderboard-section" aria-live="polite" hidden>
+            <h2>BEST LAP LEADERBOARD</h2>
+            <table class="leaderboard-table">
+              <thead>
+                <tr><th scope="col">#</th><th scope="col">DRIVER</th><th scope="col">BEST LAP</th></tr>
+              </thead>
+              <tbody id="leaderboard-rows"></tbody>
+            </table>
+          </section>
+          <button id="finish-restart" class="finish-restart" type="button">RACE AGAIN <span>↻</span></button>
+        </div>
+      </section>
+      <div id="loading" class="loading"><span></span> PREPARING THE COAST</div>
+    </main>
+  </body>
+</html>
